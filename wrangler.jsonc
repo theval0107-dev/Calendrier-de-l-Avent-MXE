@@ -1,6 +1,6 @@
 {
   // Configuration Cloudflare Workers
-  "name": "calendrier-noel",
+  "name": "calendrier-de-l-avent-mxe",
   "main": "worker/index.js",
   "compatibility_date": "2026-11-01",
   "workers_dev": true,
