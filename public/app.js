@@ -31,22 +31,29 @@ function render(data) {
   $('status').textContent = status;
 
   setupMusic(data);
+  adminMode = Boolean(data.admin);
+  $('admin-banner').hidden = !adminMode;
+  const link = $('admin-link');
+  link.href = adminMode ? '/admin' : '/admin/login';
+  link.querySelector('span').textContent = adminMode ? 'Ouvrir l’espace administrateur' : 'Se connecter en tant qu’administrateur';
 
   const grid = $('grid');
   grid.replaceChildren();
   data.cases.forEach((c, i) => grid.append(buildCase(c, i)));
 }
 
+let adminMode = false;
 function buildCase(c, index) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = `case ${c.state}`;
+  const preview = adminMode && c.state !== 'aujourdhui';
+  btn.className = `case ${c.state}${preview ? ' apercu' : ''}`;
   btn.style.animationDelay = `${index * 35}ms`;
   btn.dataset.day = c.day;
 
   const label = { aujourdhui: 'à ouvrir aujourd’hui', passee: 'passée', future: 'pas encore disponible' }[c.state];
   btn.setAttribute('aria-label', `Case du ${c.day} ${MOIS}, ${label}`);
-  if (c.state !== 'aujourdhui') btn.setAttribute('aria-disabled', 'true');
+  if (c.state !== 'aujourdhui' && !preview) btn.setAttribute('aria-disabled', 'true');
 
   const inside = document.createElement('div');
   inside.className = 'case-inside';
@@ -64,9 +71,9 @@ function buildCase(c, index) {
   deco.innerHTML = ICONS[c.icon] || ICONS.etoile; // SVG statiques, définis dans icons.js
   const tag = document.createElement('span');
   tag.className = 'tag';
-  tag.textContent = { aujourdhui: 'Ouvre-moi', passee: 'Passée', future: '' }[c.state];
+  tag.textContent = preview ? 'Aperçu admin' : { aujourdhui: 'Ouvre-moi', passee: 'Passée', future: '' }[c.state];
   door.append(num, deco, tag);
-  if (c.state !== 'aujourdhui') door.insertAdjacentHTML('beforeend', `<span class="lock">${LOCK}</span>`);
+  if (c.state !== 'aujourdhui' && !preview) door.insertAdjacentHTML('beforeend', `<span class="lock">${LOCK}</span>`);
 
   btn.append(inside, door);
   btn.addEventListener('click', () => openCase(btn, c));
@@ -77,7 +84,7 @@ function buildCase(c, index) {
 let busy = false;
 async function openCase(btn, c) {
   if (busy) return;
-  if (c.state !== 'aujourdhui') {
+  if (c.state !== 'aujourdhui' && !adminMode) {
     btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
     toast(c.state === 'passee'
       ? 'Cette case est passée : seule la case du jour peut être ouverte.'
@@ -143,7 +150,9 @@ function showModal(c) {
   $('m-closed').hidden = true;
   $('m-activate').hidden = true;
   $('ticket').hidden = true;
-  if (c.my_participation) showTicket(c.my_participation);
+  $('m-preview').hidden = !c.preview;
+  if (c.preview) { /* aperçu admin : pas de participation */ }
+  else if (c.my_participation) showTicket(c.my_participation);
   else if (c.participation_open) $('m-activate').hidden = false;
   else $('m-closed').hidden = false;
 
@@ -197,6 +206,10 @@ function showError(msg) { const e = $('f-error'); e.textContent = msg; e.hidden 
 function showTicket(p) {
   $('t-code').textContent = p.ticket_code;
   $('t-info').textContent = `@${p.pseudo} · ${p.tickets} ticket${p.tickets > 1 ? 's' : ''}`;
+  const st = p.status || 'attente';
+  const el = $('t-status');
+  el.className = `ticket-status ${st}`;
+  el.textContent = { attente: '⏳ En attente de validation', validee: '✅ Participation validée', refusee: '❌ Participation refusée' }[st];
   $('ticket').hidden = false;
 }
 
@@ -253,7 +266,7 @@ function snow() {
 let music = null;
 function setupMusic(data) {
   if (music || !data.musicEnabled) return;
-  music = createMusic({ url: data.musicUrl || null });
+  music = createMusic({ url: data.musicUrl || null, track: data.musicTrack });
   const btn = $('music-btn');
   btn.hidden = false;
   let muted = false;

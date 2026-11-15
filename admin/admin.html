@@ -36,11 +36,13 @@
         <div class="stat"><span>Participants uniques</span><strong id="s-participants">–</strong></div>
         <div class="stat"><span>Participations</span><strong id="s-participations">–</strong></div>
         <div class="stat"><span>Tickets distribués</span><strong id="s-tickets">–</strong></div>
+        <div class="stat warn"><span>À valider</span><strong id="s-pending">–</strong></div>
+        <div class="stat"><span>Validées</span><strong id="s-validated">–</strong></div>
       </div>
       <div class="panel">
         <h3>Par jour</h3>
         <div class="table-wrap"><table>
-          <thead><tr><th>Jour</th><th>Lot</th><th class="num">Ouvertures</th><th class="num">Participants</th><th class="num">Tickets</th><th>Gagnant</th></tr></thead>
+          <thead><tr><th>Jour</th><th>Lot</th><th class="num">Ouvertures</th><th class="num">Participants</th><th class="num">À valider</th><th class="num">Validées</th><th class="num">Tickets</th><th>Gagnant</th></tr></thead>
           <tbody id="by-day"></tbody>
         </table></div>
       </div>
@@ -57,21 +59,30 @@
     <!-- Participants -->
     <section data-panel="participants" hidden>
       <h2>Participants & tickets</h2>
-      <p class="lead">Toutes les personnes qui ont activé leur récompense. Visible uniquement par toi.</p>
+      <p class="lead">Toutes les personnes qui ont activé leur récompense. Vérifie leurs infos sur TikTok, puis valide ou refuse chaque participation. Seules les participations validées comptent pour le tirage.</p>
       <div class="panel">
         <div class="toolbar">
           <label>Jour
             <select id="p-day"><option value="">Tous les jours</option></select>
           </label>
+          <label>Statut
+            <select id="p-status">
+              <option value="">Tous</option>
+              <option value="attente">⏳ À valider</option>
+              <option value="validee">✅ Validées</option>
+              <option value="refusee">❌ Refusées</option>
+            </select>
+          </label>
           <label>Rechercher un pseudo
             <input id="p-search" placeholder="pseudo…">
           </label>
           <button class="btn" id="p-refresh">Actualiser</button>
+          <button class="btn" id="p-validate-all">✅ Tout valider pour ce jour</button>
           <a class="btn" id="p-csv" href="/api/admin/participations.csv">Exporter (CSV / Excel)</a>
         </div>
         <p class="hint" id="p-summary"></p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Jour</th><th>Pseudo TikTok</th><th class="num">Cœurs du jour</th><th>Top Fan</th><th class="num">Tickets</th><th>Code ticket</th><th>Date</th><th></th></tr></thead>
+          <thead><tr><th>Jour</th><th>Pseudo TikTok</th><th class="num">Cœurs du jour</th><th>Top Fan</th><th class="num">Tickets</th><th>Code ticket</th><th>Statut</th><th>Date</th><th>Actions</th></tr></thead>
           <tbody id="p-rows"></tbody>
         </table></div>
       </div>
@@ -86,6 +97,7 @@
           <label>Jour
             <select id="d-day"></select>
           </label>
+          <label class="check"><input type="checkbox" id="d-validated" checked> Seulement les participations validées</label>
           <label class="check"><input type="checkbox" id="d-exclude"> Exclure les gagnants précédents</label>
           <button class="btn-primary" id="d-go">🎲 Lancer le tirage</button>
         </div>
@@ -125,7 +137,14 @@
         <h3 class="mt">Musique</h3>
         <div class="form-grid">
           <label class="check full"><input type="checkbox" name="music_enabled"> Jouer une musique de Noël sur le calendrier</label>
-          <label class="full">Lien d’un fichier MP3 (optionnel) <span class="hint">Laisse vide pour « Jingle Bells » en boîte à musique. Utilise uniquement une musique que tu as le droit de diffuser.</span>
+          <label class="full">Musique
+            <select name="music_track">
+              <option value="wewish">We Wish You a Merry Christmas</option>
+              <option value="jingle">Jingle Bells</option>
+              <option value="doucenuit">Douce nuit</option>
+            </select>
+          </label>
+          <label class="full">Lien d’un fichier MP3 (optionnel) <span class="hint">Remplace la musique choisie au-dessus. Utilise uniquement une musique que tu as le droit de diffuser.</span>
             <input name="music_url" type="url" placeholder="https://…/musique.mp3"></label>
         </div>
         <h3 class="mt">Dates</h3>
@@ -151,14 +170,13 @@
     <!-- Compte -->
     <section data-panel="account" hidden>
       <h2>Compte</h2>
-      <p class="lead">Change ton e-mail ou ton mot de passe. Tu devras te reconnecter ensuite.</p>
+      <p class="lead">Change le code administrateur. Tu devras te reconnecter ensuite. Ne donne ce code qu’aux personnes de confiance.</p>
       <form class="panel" id="account-form">
         <div class="form-grid">
-          <label class="full">E-mail de connexion <input name="email" type="email" autocomplete="username"></label>
-          <label>Nouveau mot de passe <span class="hint">10 caractères min., lettres et chiffres. Laisse vide pour ne pas changer.</span>
-            <input name="new_password" type="password" autocomplete="new-password"></label>
-          <label>Confirmer le nouveau mot de passe <input name="confirm" type="password" autocomplete="new-password"></label>
-          <label class="full">Mot de passe actuel (obligatoire) <input name="current_password" type="password" autocomplete="current-password" required></label>
+          <label class="full">Code actuel <input name="current_code" type="password" autocomplete="current-password" required></label>
+          <label>Nouveau code <span class="hint">8 caractères minimum.</span>
+            <input name="new_code" type="password" autocomplete="new-password" required></label>
+          <label>Confirmer le nouveau code <input name="confirm" type="password" autocomplete="new-password" required></label>
         </div>
         <div class="actions"><button class="btn-primary" type="submit">Mettre à jour</button></div>
       </form>

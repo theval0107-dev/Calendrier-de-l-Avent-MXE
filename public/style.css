@@ -33,6 +33,34 @@ body {
 
 .hero, main, .foot { position: relative; z-index: 1; }
 
+/* ---------- Accès administrateur ---------- */
+.admin-bar { position: absolute; top: 16px; left: 16px; z-index: 5; }
+.admin-link {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; text-decoration: none; color: var(--neige);
+  background: rgba(10, 30, 22, .7); border: 1px solid rgba(230, 192, 104, .35); backdrop-filter: blur(6px);
+  transition: border-color .2s, background .2s;
+}
+.admin-link:hover { border-color: var(--or); background: rgba(230, 192, 104, .12); }
+.admin-banner {
+  position: relative; z-index: 2; max-width: 760px; margin: 64px auto -32px; padding: 10px 16px; border-radius: 12px; text-align: center;
+  font-size: 14px; color: var(--or); background: rgba(230, 192, 104, .1); border: 1px solid rgba(230, 192, 104, .4);
+}
+.admin-banner[hidden] { display: none; }
+@media (max-width: 560px) {
+  .admin-link span { display: none; }
+  .admin-link::after { content: "Admin"; }
+  .admin-banner { margin: 60px 16px -24px; font-size: 13px; }
+}
+.case.apercu { cursor: pointer; }
+.case.apercu .door .tag { color: var(--or); }
+.modal-preview { margin: 0 0 4px; padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--or); background: rgba(230, 192, 104, .1); border: 1px dashed rgba(230, 192, 104, .5); }
+.modal-preview[hidden] { display: none; }
+.ticket-status { margin: 12px 0 0; font-weight: 600; font-size: 14px; }
+.ticket-status.attente { color: #ffd98a; }
+.ticket-status.validee { color: #8ee0ad; }
+.ticket-status.refusee { color: #ff9aa9; }
+
 /* ---------- En-tête ---------- */
 .hero { text-align: center; padding: 56px 20px 28px; }
 .eyebrow {
@@ -60,7 +88,7 @@ main { padding: 12px 20px 40px; }
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px;
 }
 @media (max-width: 900px) { .grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); gap: 10px; } .hero { padding-top: 40px; } }
+@media (max-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); gap: 10px; } .hero { padding-top: 64px; } }
 
 .case {
   position: relative; aspect-ratio: 1 / 1.08; perspective: 900px;

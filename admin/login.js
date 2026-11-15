@@ -10,7 +10,7 @@ form.addEventListener('submit', async (e) => {
     const res = await fetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value }),
+      body: JSON.stringify({ code: document.getElementById('code').value }),
     });
     const data = await res.json();
     if (res.ok) { location.href = '/admin'; return; }

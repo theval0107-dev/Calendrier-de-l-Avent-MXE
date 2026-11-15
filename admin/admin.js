@@ -69,10 +69,13 @@ loaders.dashboard = async () => {
   $('s-participants').textContent = nf(s.totals.participants);
   $('s-participations').textContent = nf(s.totals.participations);
   $('s-tickets').textContent = nf(s.totals.tickets);
+  $('s-pending').textContent = nf(s.totals.pending);
+  $('s-validated').textContent = nf(s.totals.validated);
 
   $('by-day').replaceChildren(...s.byDay.map((r) => el('tr', { class: r.day === todayDay ? 'today' : '' },
     el('td', { text: `${r.day} déc.` }), el('td', { text: r.reward || '—' }),
     el('td', { class: 'num', text: nf(r.opens) }), el('td', { class: 'num', text: nf(r.participants) }),
+    el('td', { class: 'num', text: nf(r.pending) }), el('td', { class: 'num', text: nf(r.validated) }),
     el('td', { class: 'num', text: nf(r.tickets) }), el('td', { text: r.winner ? `@${r.winner}` : '—' }))));
 
   $('visits').replaceChildren(...(s.visitsByDate.length ? s.visitsByDate.map((v) => el('tr', {},
@@ -91,8 +94,10 @@ fillDaySelect($('d-day'), false);
 
 let participations = [];
 loaders.participants = async () => {
-  const day = $('p-day').value;
-  const data = await api(`/api/admin/participations${day ? `?day=${day}` : ''}`);
+  const q = new URLSearchParams();
+  if ($('p-day').value) q.set('day', $('p-day').value);
+  if ($('p-status').value) q.set('status', $('p-status').value);
+  const data = await api(`/api/admin/participations?${q}`);
   participations = data.participations;
   renderParticipants();
 };
@@ -100,7 +105,8 @@ function renderParticipants() {
   const q = $('p-search').value.trim().toLowerCase();
   const rows = participations.filter((p) => !q || p.pseudo.toLowerCase().includes(q));
   const tickets = rows.reduce((a, p) => a + p.tickets, 0);
-  $('p-summary').textContent = `${nf(rows.length)} participation${rows.length > 1 ? 's' : ''} · ${nf(tickets)} ticket${tickets > 1 ? 's' : ''} · ${nf(rows.filter((p) => p.top_fan).length)} Top Fan`;
+  const cnt = (st) => rows.filter((p) => p.status === st).length;
+  $('p-summary').textContent = `${nf(rows.length)} participation${rows.length > 1 ? 's' : ''} · ${nf(tickets)} ticket${tickets > 1 ? 's' : ''} · ${nf(rows.filter((p) => p.top_fan).length)} Top Fan · ⏳ ${cnt('attente')} à valider · ✅ ${cnt('validee')} validée(s) · ❌ ${cnt('refusee')} refusée(s)`;
   $('p-rows').replaceChildren(...(rows.length ? rows.map((p) => el('tr', {},
     el('td', { text: `${p.day} déc.` }),
     el('td', {}, el('a', { href: `https://www.tiktok.com/@${encodeURIComponent(p.pseudo)}`, target: '_blank', rel: 'noopener noreferrer', text: `@${p.pseudo}` })),
@@ -108,15 +114,39 @@ function renderParticipants() {
     el('td', {}, el('span', { class: `pill ${p.top_fan ? 'oui' : 'non'}`, text: p.top_fan ? 'Oui' : 'Non' })),
     el('td', { class: 'num', text: p.tickets }),
     el('td', { class: 'code', text: p.ticket_code }),
+    el('td', {}, el('span', { class: `status ${p.status}`, text: STATUS_LABELS[p.status] || p.status })),
     el('td', { text: fmtDate(p.created_at) }),
-    el('td', {}, el('button', { class: 'btn-danger', text: 'Supprimer', onclick: async () => {
-      if (!confirm(`Supprimer la participation de @${p.pseudo} (jour ${p.day}) ?`)) return;
-      try { await api(`/api/admin/participations/${p.id}`, { method: 'DELETE' }); toast('Participation supprimée'); loaders.participants(); }
-      catch (e) { toast(e.message, true); }
-    } }))))
-    : [el('tr', {}, el('td', { colspan: 8, class: 'empty', text: 'Aucune participation pour le moment.' }))]));
+    el('td', {}, el('div', { class: 'row-actions' },
+      p.status !== 'validee' ? el('button', { class: 'btn-ok', text: 'Valider', onclick: () => setStatus(p, 'validee') }) : null,
+      p.status !== 'refusee' ? el('button', { class: 'btn-no', text: 'Refuser', onclick: () => setStatus(p, 'refusee') }) : null,
+      p.status !== 'attente' ? el('button', { class: 'btn-ghost', text: '↺ En attente', title: 'Remettre en attente', onclick: () => setStatus(p, 'attente') }) : null,
+      el('button', { class: 'btn-danger', text: 'Supprimer', onclick: async () => {
+        if (!confirm(`Supprimer la participation de @${p.pseudo} (jour ${p.day}) ?`)) return;
+        try { await api(`/api/admin/participations/${p.id}`, { method: 'DELETE' }); toast('Participation supprimée'); loaders.participants(); }
+        catch (e) { toast(e.message, true); }
+      } })))))
+    : [el('tr', {}, el('td', { colspan: 9, class: 'empty', text: 'Aucune participation pour le moment.' }))]));
+}
+const STATUS_LABELS = { attente: '⏳ À valider', validee: '✅ Validée', refusee: '❌ Refusée' };
+async function setStatus(p, status) {
+  try {
+    await api(`/api/admin/participations/${p.id}`, { method: 'PUT', body: { status } });
+    p.status = status;
+    renderParticipants();
+  } catch (e) { toast(e.message, true); }
 }
 $('p-day').addEventListener('change', () => loaders.participants());
+$('p-status').addEventListener('change', () => loaders.participants());
+$('p-validate-all').addEventListener('click', async () => {
+  const day = $('p-day').value;
+  if (!day) return toast('Choisis d’abord un jour dans la liste « Jour ».', true);
+  if (!confirm(`Valider toutes les participations en attente du ${day} décembre ?`)) return;
+  try {
+    const r = await api('/api/admin/participations/validate-all', { method: 'POST', body: { day: Number(day) } });
+    toast(`${r.changed} participation(s) validée(s)`);
+    loaders.participants();
+  } catch (e) { toast(e.message, true); }
+});
 $('p-search').addEventListener('input', renderParticipants);
 $('p-refresh').addEventListener('click', () => loaders.participants());
 
@@ -146,15 +176,17 @@ $('d-go').addEventListener('click', async () => {
   const btn = $('d-go'); btn.disabled = true;
   const name = $('d-name');
   try {
-    const list = (await api(`/api/admin/participations?day=${day}`)).participations;
-    if (!list.length) throw new Error('Aucun participant pour ce jour.');
+    const onlyValidated = $('d-validated').checked;
+    const list = (await api(`/api/admin/participations?day=${day}${onlyValidated ? '&status=validee' : ''}`)).participations
+      .filter((p) => p.status !== 'refusee');
+    if (!list.length) throw new Error(onlyValidated ? 'Aucune participation validée pour ce jour. Valide des participations d’abord.' : 'Aucun participant pour ce jour.');
     // Petite animation de suspense, le vrai tirage est fait par le serveur
     name.classList.add('rolling');
     for (let i = 0; i < 22; i++) {
       name.textContent = `@${list[Math.floor(Math.random() * list.length)].pseudo}`;
       await new Promise((r) => setTimeout(r, 50 + i * 8));
     }
-    const r = await api(`/api/admin/draw/${day}`, { method: 'POST', body: { exclude_previous_winners: $('d-exclude').checked } });
+    const r = await api(`/api/admin/draw/${day}`, { method: 'POST', body: { exclude_previous_winners: $('d-exclude').checked, validated_only: onlyValidated } });
     name.classList.remove('rolling');
     name.textContent = `🎉 @${r.winner.pseudo}`;
     $('d-meta').textContent = `Ticket ${r.winner.ticket_code} · ${r.winner.tickets} ticket(s) sur ${r.winner.total_tickets} · ${r.winner.participants} participant(s)`;
@@ -234,11 +266,11 @@ $('settings-form').addEventListener('submit', async (e) => {
 $('account-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target));
-  if (body.new_password !== body.confirm) return toast('Les deux nouveaux mots de passe ne correspondent pas.', true);
+  if (body.new_code !== body.confirm) return toast('Les deux nouveaux codes ne correspondent pas.', true);
   delete body.confirm;
   try {
     await api('/api/admin/account', { method: 'PUT', body });
-    alert('Compte mis à jour. Reconnecte-toi avec tes nouveaux identifiants.');
+    alert('Code mis à jour. Reconnecte-toi avec le nouveau code.');
     location.href = '/admin/login';
   } catch (err) { toast(err.message, true); }
 });
@@ -251,7 +283,6 @@ $('logout').addEventListener('click', async () => {
 (async () => {
   const me = await api('/api/admin/me');
   CSRF = me.csrf;
-  $('who').textContent = me.email;
-  $('account-form').elements.email.value = me.email;
+  $('who').textContent = 'Connecté en administrateur';
   showTab('dashboard');
 })();

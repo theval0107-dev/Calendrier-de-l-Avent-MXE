@@ -10,12 +10,13 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 - À l'ouverture : animation de la porte, étincelles dorées, puis le lot du jour.
 - Bouton **« Activer ma récompense »** : le viewer donne son pseudo TikTok, son nombre de cœurs du jour et s'il est Top Fan. Il reçoit un ticket (ex. `J07-K3QFZ`).
 - Une seule participation par jour, par pseudo et par appareil.
-- Musique de Noël : elle démarre au premier clic (les navigateurs bloquent le son avant) et se coupe avec un bouton.
+- Musique de Noël (We Wish You a Merry Christmas, Jingle Bells ou Douce nuit, au choix dans les Réglages) : elle démarre au premier clic, car les navigateurs bloquent le son avant, et se coupe avec un bouton.
 
-**Côté administrateur** (`/admin`, protégé par mot de passe)
+**Côté administrateur** (bouton en haut à gauche ou `/admin`, protégé par un code)
+- Une fois connecté, tu peux **ouvrir toutes les cases en avance** sur le calendrier (aperçu).
 - **Tableau de bord** : visiteurs du jour et au total, pages vues, participants, tickets, et le détail jour par jour.
-- **Participants & tickets** : la liste complète (pseudo, cœurs, Top Fan, tickets, code), recherche, suppression, export Excel/CSV.
-- **Tirage au sort** : un gagnant par jour, avec une chance par ticket. Historique des tirages et possibilité d'annuler.
+- **Participants & tickets** : la liste complète (pseudo, cœurs, Top Fan, tickets, code, statut). Chaque participation arrive « à valider » : tu la **valides** ou la **refuses** après vérification sur TikTok, une par une ou toutes d'un coup pour un jour. Il y a aussi une recherche et un export Excel/CSV. Le viewer voit le statut de son ticket.
+- **Tirage au sort** : un gagnant par jour parmi les participations **validées**, avec une chance par ticket. Historique des tirages et possibilité d'annuler.
 - **Cases & lots** : titre, message, lot, image, lien et décoration de chaque case.
 - **Réglages** : nom du calendrier, textes, année, musique (tu peux mettre ton propre MP3), date de test, ouverture et fermeture des participations, règles des tickets.
 - **Compte** : changer l'e-mail et le mot de passe.
@@ -34,19 +35,18 @@ Le site tourne sur l'offre **gratuite** de Cloudflare (pas de carte bancaire). L
 1. Crée un compte gratuit sur https://dash.cloudflare.com/sign-up
 2. Va dans **Workers & Pages** → **Créer** → **Importer un dépôt** (Import a repository) → connecte GitHub → choisis ce dépôt.
 3. Laisse les réglages par défaut (commande de déploiement : `npx wrangler deploy`) et lance le déploiement.
-4. Une fois déployé : **Paramètres** (Settings) → **Variables et secrets** → ajoute deux **secrets** :
-   - `ADMIN_EMAIL` = ton e-mail
-   - `ADMIN_PASSWORD` = ton mot de passe (10 caractères minimum, lettres et chiffres)
+4. Une fois déployé : **Settings** → **Variables and Secrets** → ajoute un **secret** :
+   - `ADMIN_CODE` = ton code administrateur (8 caractères minimum)
 5. Ton lien est affiché sur la page du Worker : `https://calendrier-noel.<ton-nom>.workers.dev`. L'administration est sur `/admin`.
 
-> Le compte administrateur est créé la première fois que le site démarre avec ces deux secrets. Ensuite, change ton mot de passe depuis l'onglet **Compte**.
+> Pour te connecter, utilise le bouton **« Se connecter en tant qu'administrateur »** en haut à gauche du calendrier, puis entre le code. Si tu changes le secret `ADMIN_CODE`, le code est remplacé. Tu peux aussi le changer depuis l'onglet **Compte**. Ne mets jamais le code dans les fichiers du dépôt : il est public.
 
 **Limites de l'offre gratuite** : 100 000 requêtes par jour pour le serveur (les fichiers du site, comme les images, le CSS et le JS, ne comptent pas), et une base de 5 Go. C'est largement suffisant pour un calendrier communautaire.
 
 ### Tester sur ton ordinateur (optionnel)
 ```bash
 npm install
-printf 'ADMIN_EMAIL=toi@exemple.fr\nADMIN_PASSWORD=TonMotDePasse123\n' > .dev.vars
+printf 'ADMIN_CODE=TonCodeSecret\n' > .dev.vars
 npm run dev
 ```
 Après avoir modifié un fichier du dossier `admin/`, lance `npm run build-admin`.

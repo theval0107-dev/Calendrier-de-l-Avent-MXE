@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS = {
   tickets_max: '10',
   music_enabled: '1',
   music_url: '',
+  music_track: 'wewish',
 };
 
 const SCHEMA = `
@@ -34,7 +35,7 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cases (day INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', reward TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', link_url TEXT NOT NULL DEFAULT '', link_label TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE COLLATE NOCASE, pass_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, admin_id INTEGER NOT NULL, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS participations (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, pseudo TEXT NOT NULL, hearts INTEGER NOT NULL DEFAULT 0, top_fan INTEGER NOT NULL DEFAULT 0, tickets INTEGER NOT NULL DEFAULT 1, ticket_code TEXT NOT NULL UNIQUE, visitor_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS participations (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, pseudo TEXT NOT NULL, hearts INTEGER NOT NULL DEFAULT 0, top_fan INTEGER NOT NULL DEFAULT 0, tickets INTEGER NOT NULL DEFAULT 1, ticket_code TEXT NOT NULL UNIQUE, visitor_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'attente', created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_pseudo ON participations(day, pseudo COLLATE NOCASE);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_visitor ON participations(day, visitor_id);
 CREATE TABLE IF NOT EXISTS visits (date TEXT NOT NULL, visitor_id TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, visitor_id));
@@ -45,6 +46,8 @@ CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL,
 
 const SESSION_MS = 12 * 3600 * 1000;
 const PBKDF2_ITER = 20000;
+const STATUSES = ['attente', 'validee', 'refusee'];
+const MUSIC_TRACKS = ['wewish', 'jingle', 'doucenuit'];
 
 // =====================================================================
 //  Utilitaires
@@ -77,10 +80,10 @@ async function verifyPassword(pw, stored) {
   if (algo !== 'pbkdf2') return false;
   return safeEqual(hex(await pbkdf2(pw, fromHex(salt), Number(iter))), h);
 }
-function passwordProblem(pw) {
-  if (typeof pw !== 'string' || pw.length < 10) return 'Le mot de passe doit contenir au moins 10 caractères.';
-  if (pw.length > 200) return 'Mot de passe trop long.';
-  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw)) return 'Le mot de passe doit contenir au moins une lettre et un chiffre.';
+
+function codeProblem(code) {
+  if (typeof code !== 'string' || code.trim().length < 8) return 'Le code doit contenir au moins 8 caractères.';
+  if (code.length > 100) return 'Code trop long.';
   return null;
 }
 
@@ -140,14 +143,32 @@ async function init(env) {
       DEFAULT_REWARDS[d - 1], ICONS[(d - 1) % ICONS.length]));
   }
   await db.batch(stmts);
-  const { n } = await db.prepare('SELECT COUNT(*) AS n FROM admins').first();
-  if (n === 0 && env.ADMIN_EMAIL && env.ADMIN_PASSWORD && !passwordProblem(env.ADMIN_PASSWORD)) {
-    await db.prepare('INSERT OR IGNORE INTO admins (email, pass_hash) VALUES (?, ?)').bind(String(env.ADMIN_EMAIL).trim(), await hashPassword(env.ADMIN_PASSWORD)).run();
+  // Mise à jour d'une base créée avec une version précédente
+  try { await db.prepare("ALTER TABLE participations ADD COLUMN status TEXT NOT NULL DEFAULT 'attente'").run(); } catch { /* déjà présente */ }
+
+  // Code administrateur : vient du secret Cloudflare ADMIN_CODE (ou ADMIN_PASSWORD).
+  // Si le secret change, le code est remplacé. Sinon, le code choisi dans l'onglet Compte est gardé.
+  const seed = env.ADMIN_CODE || env.ADMIN_PASSWORD;
+  if (seed && !codeProblem(seed)) {
+    const seedHash = await sha256(`seed:${seed}`);
+    const applied = await db.prepare("SELECT value FROM settings WHERE key = 'admin_seed'").first();
+    const admin = await db.prepare('SELECT id FROM admins ORDER BY id LIMIT 1').first();
+    if (!admin) {
+      await db.prepare('INSERT INTO admins (email, pass_hash) VALUES (?, ?)').bind(String(env.ADMIN_EMAIL || 'admin').trim(), await hashPassword(seed)).run();
+    } else if (!applied || applied.value !== seedHash) {
+      await db.batch([
+        db.prepare('UPDATE admins SET pass_hash = ? WHERE id = ?').bind(await hashPassword(seed), admin.id),
+        db.prepare('DELETE FROM sessions'),
+      ]);
+    }
+    if (!applied || applied.value !== seedHash) {
+      await db.prepare("INSERT INTO settings (key, value) VALUES ('admin_seed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(seedHash).run();
+    }
   }
 }
 
 async function getSettings(db) {
-  const { results } = await db.prepare('SELECT key, value FROM settings').all();
+  const { results } = await db.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'admin_%'").all();
   return Object.fromEntries(results.map((r) => [r.key, r.value]));
 }
 
@@ -254,13 +275,15 @@ async function handleApi(req, env, url, res) {
     const s = await getSettings(db);
     const t = calendarToday(s);
     const vid = visitorId(req, res);
+    const isAdmin = Boolean(await currentSession(req, db));
     const [, icons] = await db.batch([
       db.prepare('INSERT INTO visits (date, visitor_id) VALUES (?, ?) ON CONFLICT(date, visitor_id) DO UPDATE SET views = views + 1').bind(t.date, vid),
       db.prepare('SELECT day, icon FROM cases ORDER BY day'),
     ]);
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
-      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '',
+      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'wewish',
+      admin: isAdmin,
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
         day: c.day, icon: c.icon,
@@ -275,19 +298,27 @@ async function handleApi(req, env, url, res) {
     const s = await getSettings(db);
     const t = calendarToday(s);
     if (day < 1 || day > 24) return res.error('Case invalide', 400);
-    if (t.day !== day) {
+    const isAdmin = Boolean(await currentSession(req, db));
+    if (t.day !== day && !isAdmin) {
       const msg = t.day === null
         ? (t.status === 'avant' ? 'Le calendrier commence le 1er décembre !' : 'Le calendrier est terminé. Joyeux Noël !')
         : day < t.day ? 'Cette case est passée : seule la case du jour peut être ouverte.' : 'Patience ! Cette case n’est pas encore disponible.';
       return res.error(msg, 403);
     }
     const vid = visitorId(req, res);
-    const [c, , mine] = await db.batch([
+    const isToday = t.day === day;
+    const queries = [
       db.prepare('SELECT day, title, message, reward, image_url, link_url, link_label FROM cases WHERE day = ?').bind(day),
-      db.prepare('INSERT INTO opens (day, date, count) VALUES (?, ?, 1) ON CONFLICT(day, date) DO UPDATE SET count = count + 1').bind(day, t.date),
-      db.prepare('SELECT pseudo, tickets, ticket_code FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid),
-    ]);
-    return res.json({ ...c.results[0], participation_open: s.participation_open === '1', my_participation: mine.results[0] || null });
+      db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid),
+    ];
+    // Les ouvertures faites par l'administrateur ne sont pas comptées dans les statistiques
+    if (!isAdmin) queries.push(db.prepare('INSERT INTO opens (day, date, count) VALUES (?, ?, 1) ON CONFLICT(day, date) DO UPDATE SET count = count + 1').bind(day, t.date));
+    const [c, mine] = await db.batch(queries);
+    return res.json({
+      ...c.results[0], preview: !isToday,
+      participation_open: isToday && s.participation_open === '1',
+      my_participation: mine.results[0] || null,
+    });
   }
 
   if ((mm = p.match(/^\/api\/participate\/(\d+)$/)) && m === 'POST') {
@@ -307,7 +338,7 @@ async function handleApi(req, env, url, res) {
     const topFan = b.top_fan === true;
 
     const vid = visitorId(req, res);
-    const already = await db.prepare('SELECT pseudo, tickets, ticket_code FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid).first();
+    const already = await db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid).first();
     if (already) return res.json({ error: 'Tu as déjà activé ta récompense aujourd’hui.', my_participation: already }, 409);
     if (await db.prepare('SELECT 1 AS x FROM participations WHERE day = ? AND pseudo = ? COLLATE NOCASE').bind(day, pseudo).first()) {
       return res.error('Ce pseudo a déjà participé aujourd’hui.', 409);
@@ -318,7 +349,7 @@ async function handleApi(req, env, url, res) {
       try {
         await db.prepare('INSERT INTO participations (day, pseudo, hearts, top_fan, tickets, ticket_code, visitor_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
           .bind(day, pseudo, hearts, topFan ? 1 : 0, tickets, code, vid).run();
-        return res.json({ ok: true, my_participation: { pseudo, tickets, ticket_code: code } });
+        return res.json({ ok: true, my_participation: { pseudo, tickets, ticket_code: code, status: 'attente' } });
       } catch (e) {
         if (!String(e.message).includes('ticket_code')) return res.error('Participation déjà enregistrée pour aujourd’hui.', 409);
       }
@@ -329,19 +360,18 @@ async function handleApi(req, env, url, res) {
   // ---------------- Connexion admin ----------------
   if (p === '/api/admin/login' && m === 'POST') {
     const b = await readJson(req);
-    const email = clean(b.email, 200);
-    const password = String(b.password ?? '').slice(0, 200);
-    const keys = [`login-ip:${ip}`, `login-email:${email.toLowerCase()}`];
+    const code = String(b.code ?? '').trim().slice(0, 100);
+    const keys = [`login-ip:${ip}`, 'login-global'];
     const wait = await blockedMinutes(db, keys);
-    if (wait) return res.error(`Trop de tentatives. Réessayez dans ${wait} min.`, 429);
-    const admin = await db.prepare('SELECT * FROM admins WHERE email = ?').bind(email).first();
-    const ok = admin ? await verifyPassword(password, admin.pass_hash) : (await hashPassword(password), false);
-    if (!ok) {
-      await hit(db, keys[0], 10, 15 * 60000, 15 * 60000);
-      await hit(db, keys[1], 5, 15 * 60000, 15 * 60000);
-      return res.error('Identifiants incorrects.', 401);
+    if (wait) return res.error(`Trop de tentatives. Réessaie dans ${wait} min.`, 429);
+    const admin = await db.prepare('SELECT * FROM admins ORDER BY id LIMIT 1').first();
+    if (!admin) return res.error('Aucun code administrateur n’est configuré (secret ADMIN_CODE dans Cloudflare).', 503);
+    if (!code || !(await verifyPassword(code, admin.pass_hash))) {
+      await hit(db, keys[0], 5, 15 * 60000, 15 * 60000);
+      await hit(db, keys[1], 50, 60 * 60000, 15 * 60000);
+      return res.error('Code incorrect.', 401);
     }
-    await db.prepare('DELETE FROM limits WHERE key IN (?, ?)').bind(...keys).run();
+    await db.prepare('DELETE FROM limits WHERE key = ?').bind(keys[0]).run();
     const token = randomToken(32), csrf = randomToken(24);
     await db.batch([
       db.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(Date.now()),
@@ -371,7 +401,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     res.setCookie(cookie('admin_session', '', { maxAge: 0 }));
     return res.json({ ok: true });
   }
-  if (p === '/api/admin/me' && m === 'GET') return res.json({ email: sess.email, csrf: sess.csrf });
+  if (p === '/api/admin/me' && m === 'GET') return res.json({ csrf: sess.csrf });
 
   if (p === '/api/admin/cases' && m === 'GET') {
     const { results } = await db.prepare('SELECT * FROM cases ORDER BY day').all();
@@ -410,6 +440,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const values = {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
+      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'wewish',
       tickets_base: int(b.tickets_base, 1, 100, 1), tickets_topfan_bonus: int(b.tickets_topfan_bonus, 0, 100, 0),
       tickets_hearts_step: int(b.tickets_hearts_step, 0, 1000000, 0), tickets_max: int(b.tickets_max, 1, 1000, 10),
     };
@@ -429,9 +460,13 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
       db.prepare('SELECT COUNT(DISTINCT pseudo COLLATE NOCASE) AS n FROM participations'),
       db.prepare('SELECT COUNT(*) AS n FROM participations'),
       db.prepare('SELECT COALESCE(SUM(tickets),0) AS n FROM participations'),
+      db.prepare("SELECT COUNT(*) AS n FROM participations WHERE status = 'attente'"),
+      db.prepare("SELECT COUNT(*) AS n FROM participations WHERE status = 'validee'"),
       db.prepare('SELECT date, COUNT(*) AS visitors, SUM(views) AS views FROM visits GROUP BY date ORDER BY date DESC LIMIT 60'),
       db.prepare(`SELECT c.day, c.reward,
           (SELECT COUNT(*) FROM participations p WHERE p.day = c.day) AS participants,
+          (SELECT COUNT(*) FROM participations p WHERE p.day = c.day AND p.status = 'validee') AS validated,
+          (SELECT COUNT(*) FROM participations p WHERE p.day = c.day AND p.status = 'attente') AS pending,
           (SELECT COALESCE(SUM(tickets),0) FROM participations p WHERE p.day = c.day) AS tickets,
           (SELECT COALESCE(SUM(count),0) FROM opens o WHERE o.day = c.day) AS opens,
           (SELECT pseudo FROM draws d WHERE d.day = c.day ORDER BY id DESC LIMIT 1) AS winner
@@ -440,24 +475,41 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const n = (i) => r[i].results[0].n;
     return res.json({
       today: t,
-      totals: { visitors: n(0), views: n(1), visitorsToday: n(2), participants: n(3), participations: n(4), tickets: n(5) },
-      visitsByDate: r[6].results, byDay: r[7].results,
+      totals: { visitors: n(0), views: n(1), visitorsToday: n(2), participants: n(3), participations: n(4), tickets: n(5), pending: n(6), validated: n(7) },
+      visitsByDate: r[8].results, byDay: r[9].results,
     });
   }
 
   if (p === '/api/admin/participations' && m === 'GET') {
     const day = Number(url.searchParams.get('day'));
-    const q = Number.isInteger(day) && day >= 1 && day <= 24
-      ? db.prepare('SELECT id, day, pseudo, hearts, top_fan, tickets, ticket_code, created_at FROM participations WHERE day = ? ORDER BY id DESC').bind(day)
-      : db.prepare('SELECT id, day, pseudo, hearts, top_fan, tickets, ticket_code, created_at FROM participations ORDER BY id DESC LIMIT 5000');
-    return res.json({ participations: (await q.all()).results });
+    const status = url.searchParams.get('status');
+    const where = [], args = [];
+    if (Number.isInteger(day) && day >= 1 && day <= 24) { where.push('day = ?'); args.push(day); }
+    if (STATUSES.includes(status)) { where.push('status = ?'); args.push(status); }
+    const sql = `SELECT id, day, pseudo, hearts, top_fan, tickets, ticket_code, status, created_at FROM participations
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT 5000`;
+    return res.json({ participations: (await db.prepare(sql).bind(...args).all()).results });
   }
   if (p === '/api/admin/participations.csv' && m === 'GET') {
-    const { results } = await db.prepare('SELECT day, pseudo, hearts, top_fan, tickets, ticket_code, created_at FROM participations ORDER BY day, id').all();
+    const { results } = await db.prepare('SELECT day, pseudo, hearts, top_fan, tickets, ticket_code, status, created_at FROM participations ORDER BY day, id').all();
+    const label = { attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
     const esc = (v) => { let x = String(v ?? ''); if (/^[=+\-@]/.test(x)) x = "'" + x; return `"${x.replace(/"/g, '""')}"`; };
-    const lines = ['Jour;Pseudo TikTok;Coeurs du jour;Top Fan;Tickets;Code ticket;Date (UTC)']
-      .concat(results.map((r) => [r.day, r.pseudo, r.hearts, r.top_fan ? 'Oui' : 'Non', r.tickets, r.ticket_code, r.created_at].map(esc).join(';')));
+    const lines = ['Jour;Pseudo TikTok;Coeurs du jour;Top Fan;Tickets;Code ticket;Statut;Date (UTC)']
+      .concat(results.map((r) => [r.day, r.pseudo, r.hearts, r.top_fan ? 'Oui' : 'Non', r.tickets, r.ticket_code, label[r.status] || r.status, r.created_at].map(esc).join(';')));
     return res.build('﻿' + lines.join('\r\n'), 200, 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="participations.csv"' });
+  }
+  if ((mm = p.match(/^\/api\/admin\/participations\/(\d+)$/)) && m === 'PUT') {
+    const b = await readJson(req);
+    if (!STATUSES.includes(b.status)) return res.error('Statut invalide', 400);
+    await db.prepare('UPDATE participations SET status = ? WHERE id = ?').bind(b.status, Number(mm[1])).run();
+    return res.json({ ok: true });
+  }
+  if (p === '/api/admin/participations/validate-all' && m === 'POST') {
+    const b = await readJson(req);
+    const day = Number(b.day);
+    if (!Number.isInteger(day) || day < 1 || day > 24) return res.error('Choisis un jour', 400);
+    const r = await db.prepare("UPDATE participations SET status = 'validee' WHERE day = ? AND status = 'attente'").bind(day).run();
+    return res.json({ ok: true, changed: r.meta?.changes ?? 0 });
   }
   if ((mm = p.match(/^\/api\/admin\/participations\/(\d+)$/)) && m === 'DELETE') {
     await db.prepare('DELETE FROM participations WHERE id = ?').bind(Number(mm[1])).run();
@@ -468,12 +520,13 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const day = Number(mm[1]);
     if (day < 1 || day > 24) return res.error('Case invalide', 400);
     const b = await readJson(req);
-    let rows = (await db.prepare('SELECT id, pseudo, tickets, ticket_code FROM participations WHERE day = ?').bind(day).all()).results;
+    const onlyValidated = b.validated_only !== false;
+    let rows = (await db.prepare(`SELECT id, pseudo, tickets, ticket_code FROM participations WHERE day = ?${onlyValidated ? " AND status = 'validee'" : " AND status != 'refusee'"}`).bind(day).all()).results;
     if (b.exclude_previous_winners === true) {
       const won = new Set((await db.prepare('SELECT pseudo FROM draws').all()).results.map((r) => r.pseudo.toLowerCase()));
       rows = rows.filter((r) => !won.has(r.pseudo.toLowerCase()));
     }
-    if (!rows.length) return res.error('Aucun participant éligible pour ce jour.', 400);
+    if (!rows.length) return res.error(onlyValidated ? 'Aucune participation validée pour ce jour. Valide des participations d’abord.' : 'Aucun participant éligible pour ce jour.', 400);
     const total = rows.reduce((a, r) => a + r.tickets, 0);
     let pick = randomInt(total);
     const winner = rows.find((r) => (pick -= r.tickets) < 0);
@@ -492,17 +545,12 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
   if (p === '/api/admin/account' && m === 'PUT') {
     const b = await readJson(req);
     const admin = await db.prepare('SELECT * FROM admins WHERE id = ?').bind(sess.adminId).first();
-    if (!(await verifyPassword(String(b.current_password || ''), admin.pass_hash))) return res.error('Mot de passe actuel incorrect.', 400);
-    const email = clean(b.email, 200) || admin.email;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.error('Adresse e-mail invalide.', 400);
-    let hash = admin.pass_hash;
-    if (b.new_password) {
-      const prob = passwordProblem(b.new_password);
-      if (prob) return res.error(prob, 400);
-      hash = await hashPassword(b.new_password);
-    }
+    if (!(await verifyPassword(String(b.current_code || '').trim(), admin.pass_hash))) return res.error('Code actuel incorrect.', 400);
+    const next = String(b.new_code || '').trim();
+    const prob = codeProblem(next);
+    if (prob) return res.error(prob, 400);
     await db.batch([
-      db.prepare('UPDATE admins SET email = ?, pass_hash = ? WHERE id = ?').bind(email, hash, admin.id),
+      db.prepare('UPDATE admins SET pass_hash = ? WHERE id = ?').bind(await hashPassword(next), admin.id),
       db.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(admin.id),
     ]);
     res.setCookie(cookie('admin_session', '', { maxAge: 0 }));
