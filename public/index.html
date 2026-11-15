@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendrier de Noël</title>
+  <meta name="description" content="Calendrier de l'Avent : une surprise par jour du 1er au 24 décembre.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <canvas id="snow" aria-hidden="true"></canvas>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="hero">
+    <p class="eyebrow" id="year">Calendrier de l'Avent</p>
+    <h1 id="app-name">Calendrier de Noël</h1>
+    <p class="subtitle" id="subtitle"></p>
+    <p class="status" id="status" role="status"></p>
+  </header>
+
+  <main>
+    <div class="grid" id="grid" aria-label="Cases du calendrier"></div>
+  </main>
+
+  <footer class="foot" id="footer"></footer>
+
+  <button class="music-btn" id="music-btn" type="button" aria-pressed="false" hidden>
+    <span class="music-icon" aria-hidden="true">♪</span><span id="music-label">Musique</span>
+  </button>
+
+  <div class="toast" id="toast" role="alert" hidden></div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="m-title">
+      <button class="modal-close" data-close aria-label="Fermer">×</button>
+      <div class="modal-gift" aria-hidden="true">
+        <div class="gift-lid"></div>
+        <div class="gift-box"></div>
+      </div>
+      <p class="modal-day" id="m-day"></p>
+      <h2 id="m-title"></h2>
+      <img id="m-image" alt="" hidden>
+      <p class="modal-message" id="m-message"></p>
+      <div class="modal-reward" id="m-reward-wrap" hidden>
+        <span>🎁 Lot du jour</span>
+        <strong id="m-reward"></strong>
+      </div>
+
+      <button class="btn" id="m-activate" type="button" hidden>Activer ma récompense</button>
+      <p class="modal-note" id="m-closed" hidden>Les participations sont fermées pour le moment.</p>
+
+      <form class="part-form" id="part-form" hidden novalidate>
+        <label>Ton pseudo TikTok
+          <span class="at-field"><span>@</span><input id="f-pseudo" name="pseudo" required maxlength="24" autocomplete="nickname" placeholder="tonpseudo"></span>
+        </label>
+        <label>Ton nombre de cœurs du jour
+          <input id="f-hearts" name="hearts" type="number" inputmode="numeric" min="0" max="1000000" step="1" required placeholder="ex : 25">
+        </label>
+        <fieldset>
+          <legend>Es-tu Top Fan ?</legend>
+          <label class="radio"><input type="radio" name="topfan" value="oui"> Oui</label>
+          <label class="radio"><input type="radio" name="topfan" value="non" checked> Non</label>
+        </fieldset>
+        <p class="form-error" id="f-error" role="alert" hidden></p>
+        <button class="btn" type="submit" id="f-submit">Valider ma participation</button>
+        <p class="modal-note">Une seule participation par jour. Les informations sont vérifiées pendant le live.</p>
+      </form>
+
+      <div class="ticket" id="ticket" hidden>
+        <p class="ticket-ok">✅ Récompense activée !</p>
+        <div class="ticket-card">
+          <span class="ticket-label">Ton ticket</span>
+          <strong id="t-code"></strong>
+          <span id="t-info"></span>
+        </div>
+        <p class="modal-note">Fais une capture d’écran de ton ticket. Le gagnant sera tiré au sort parmi les participants.</p>
+      </div>
+
+      <a class="btn btn-ghost" id="m-link" target="_blank" rel="noopener noreferrer" hidden></a>
+    </div>
+  </div>
+</body>
+</html>

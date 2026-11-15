@@ -1,0 +1,16 @@
+{
+  "name": "calendrier-noel",
+  "version": "1.0.0",
+  "description": "Calendrier de l'Avent interactif avec espace administrateur",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

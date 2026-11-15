@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Connexion administrateur</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/login.js"></script>
+</head>
+<body class="login-page">
+  <form class="login-card" id="login-form" novalidate>
+    <div class="login-logo">🎄</div>
+    <h1>Espace administrateur</h1>
+    <p class="muted">Accès réservé.</p>
+    <label>E-mail
+      <input type="email" id="email" autocomplete="username" required>
+    </label>
+    <label>Mot de passe
+      <input type="password" id="password" autocomplete="current-password" required>
+    </label>
+    <p class="error" id="error" role="alert" hidden></p>
+    <button class="btn-primary" type="submit" id="submit">Se connecter</button>
+    <a class="back" href="/">← Retour au calendrier</a>
+  </form>
+</body>
+</html>

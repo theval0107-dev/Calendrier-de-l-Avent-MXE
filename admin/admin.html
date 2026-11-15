@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Administration · Calendrier</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="side">
+    <div class="brand">🎄 Administration</div>
+    <button class="tab active" data-tab="dashboard">Tableau de bord</button>
+    <button class="tab" data-tab="participants">Participants & tickets</button>
+    <button class="tab" data-tab="draw">Tirage au sort</button>
+    <button class="tab" data-tab="cases">Cases & lots</button>
+    <button class="tab" data-tab="settings">Réglages</button>
+    <button class="tab" data-tab="account">Compte</button>
+    <div class="spacer"></div>
+    <div class="who" id="who"></div>
+    <a class="view" href="/" target="_blank" rel="noopener">Voir le calendrier ↗</a>
+    <button class="tab" id="logout">Se déconnecter</button>
+  </nav>
+
+  <main class="content">
+    <!-- Tableau de bord -->
+    <section data-panel="dashboard">
+      <h2>Tableau de bord</h2>
+      <p class="lead" id="today-line"></p>
+      <div class="cards">
+        <div class="stat"><span>Visiteurs aujourd’hui</span><strong id="s-visitors-today">–</strong></div>
+        <div class="stat"><span>Visiteurs au total</span><strong id="s-visitors">–</strong></div>
+        <div class="stat"><span>Pages vues</span><strong id="s-views">–</strong></div>
+        <div class="stat"><span>Participants uniques</span><strong id="s-participants">–</strong></div>
+        <div class="stat"><span>Participations</span><strong id="s-participations">–</strong></div>
+        <div class="stat"><span>Tickets distribués</span><strong id="s-tickets">–</strong></div>
+      </div>
+      <div class="panel">
+        <h3>Par jour</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Jour</th><th>Lot</th><th class="num">Ouvertures</th><th class="num">Participants</th><th class="num">Tickets</th><th>Gagnant</th></tr></thead>
+          <tbody id="by-day"></tbody>
+        </table></div>
+      </div>
+      <div class="panel">
+        <h3>Visites du site</h3>
+        <p class="hint">Visiteurs uniques (par appareil) et nombre de pages vues, par date.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th class="num">Visiteurs</th><th class="num">Pages vues</th></tr></thead>
+          <tbody id="visits"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Participants -->
+    <section data-panel="participants" hidden>
+      <h2>Participants & tickets</h2>
+      <p class="lead">Toutes les personnes qui ont activé leur récompense. Visible uniquement par toi.</p>
+      <div class="panel">
+        <div class="toolbar">
+          <label>Jour
+            <select id="p-day"><option value="">Tous les jours</option></select>
+          </label>
+          <label>Rechercher un pseudo
+            <input id="p-search" placeholder="pseudo…">
+          </label>
+          <button class="btn" id="p-refresh">Actualiser</button>
+          <a class="btn" id="p-csv" href="/api/admin/participations.csv">Exporter (CSV / Excel)</a>
+        </div>
+        <p class="hint" id="p-summary"></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Jour</th><th>Pseudo TikTok</th><th class="num">Cœurs du jour</th><th>Top Fan</th><th class="num">Tickets</th><th>Code ticket</th><th>Date</th><th></th></tr></thead>
+          <tbody id="p-rows"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Tirage -->
+    <section data-panel="draw" hidden>
+      <h2>Tirage au sort</h2>
+      <p class="lead">Tire un gagnant parmi les participants d’un jour. Chaque ticket compte comme une chance.</p>
+      <div class="panel">
+        <div class="toolbar">
+          <label>Jour
+            <select id="d-day"></select>
+          </label>
+          <label class="check"><input type="checkbox" id="d-exclude"> Exclure les gagnants précédents</label>
+          <button class="btn-primary" id="d-go">🎲 Lancer le tirage</button>
+        </div>
+        <div class="draw-stage">
+          <div class="muted" id="d-reward"></div>
+          <div class="draw-name" id="d-name">—</div>
+          <div class="draw-meta" id="d-meta"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Historique des tirages</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Jour</th><th>Lot</th><th>Gagnant</th><th>Code ticket</th><th>Date</th><th></th></tr></thead>
+          <tbody id="d-history"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Cases -->
+    <section data-panel="cases" hidden>
+      <h2>Cases & lots</h2>
+      <p class="lead">Modifie le contenu de chaque case : titre, message, lot, image et lien.</p>
+      <div class="case-list" id="case-list"></div>
+    </section>
+
+    <!-- Réglages -->
+    <section data-panel="settings" hidden>
+      <h2>Réglages</h2>
+      <p class="lead">Nom du calendrier, dates, participations et règles des tickets.</p>
+      <form class="panel" id="settings-form">
+        <h3>Apparence</h3>
+        <div class="form-grid">
+          <label class="full">Nom du calendrier <input name="app_name" maxlength="80" required></label>
+          <label class="full">Sous-titre <input name="subtitle" maxlength="200"></label>
+          <label class="full">Texte du bas de page <input name="footer_text" maxlength="300"></label>
+        </div>
+        <h3 class="mt">Musique</h3>
+        <div class="form-grid">
+          <label class="check full"><input type="checkbox" name="music_enabled"> Jouer une musique de Noël sur le calendrier</label>
+          <label class="full">Lien d’un fichier MP3 (optionnel) <span class="hint">Laisse vide pour « Jingle Bells » en boîte à musique. Utilise uniquement une musique que tu as le droit de diffuser.</span>
+            <input name="music_url" type="url" placeholder="https://…/musique.mp3"></label>
+        </div>
+        <h3 class="mt">Dates</h3>
+        <div class="form-grid">
+          <label>Année du calendrier <input name="year" type="number" min="2024" max="2100" required></label>
+          <label>Fuseau horaire <input name="timezone" placeholder="Europe/Paris"></label>
+          <label class="full">Date de test <span class="hint">Pour essayer le calendrier avant décembre. Laisse vide pour utiliser la vraie date. ⚠️ Les viewers voient aussi cette date.</span>
+            <input name="test_date" type="date">
+          </label>
+        </div>
+        <h3 class="mt">Participations & tickets</h3>
+        <div class="form-grid">
+          <label class="check full"><input type="checkbox" name="participation_open"> Les viewers peuvent activer leur récompense</label>
+          <label>Tickets par participation <input name="tickets_base" type="number" min="1" max="100"></label>
+          <label>Tickets bonus si Top Fan <input name="tickets_topfan_bonus" type="number" min="0" max="100"></label>
+          <label>+1 ticket tous les … cœurs <span class="hint">0 = désactivé</span><input name="tickets_hearts_step" type="number" min="0"></label>
+          <label>Maximum de tickets par personne <input name="tickets_max" type="number" min="1" max="1000"></label>
+        </div>
+        <div class="actions"><button class="btn-primary" type="submit">Enregistrer</button><span class="saved" id="settings-saved" hidden>Enregistré ✓</span></div>
+      </form>
+    </section>
+
+    <!-- Compte -->
+    <section data-panel="account" hidden>
+      <h2>Compte</h2>
+      <p class="lead">Change ton e-mail ou ton mot de passe. Tu devras te reconnecter ensuite.</p>
+      <form class="panel" id="account-form">
+        <div class="form-grid">
+          <label class="full">E-mail de connexion <input name="email" type="email" autocomplete="username"></label>
+          <label>Nouveau mot de passe <span class="hint">10 caractères min., lettres et chiffres. Laisse vide pour ne pas changer.</span>
+            <input name="new_password" type="password" autocomplete="new-password"></label>
+          <label>Confirmer le nouveau mot de passe <input name="confirm" type="password" autocomplete="new-password"></label>
+          <label class="full">Mot de passe actuel (obligatoire) <input name="current_password" type="password" autocomplete="current-password" required></label>
+        </div>
+        <div class="actions"><button class="btn-primary" type="submit">Mettre à jour</button></div>
+      </form>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+</body>
+</html>
