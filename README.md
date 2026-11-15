@@ -28,35 +28,33 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 
 > Le nombre de cœurs et le statut Top Fan sont déclarés par le viewer. Vérifie-les sur TikTok avant de remettre un lot.
 
-## Lancer le site sur ton ordinateur
-Il faut **Node.js 22.13 ou plus récent** (https://nodejs.org).
+## Hébergement gratuit : Cloudflare Workers + D1
+Le site tourne sur l'offre **gratuite** de Cloudflare (pas de carte bancaire). La base de données (D1) est créée automatiquement au premier déploiement.
 
+1. Crée un compte gratuit sur https://dash.cloudflare.com/sign-up
+2. Va dans **Workers & Pages** → **Créer** → **Importer un dépôt** (Import a repository) → connecte GitHub → choisis ce dépôt.
+3. Laisse les réglages par défaut (commande de déploiement : `npx wrangler deploy`) et lance le déploiement.
+4. Une fois déployé : **Paramètres** (Settings) → **Variables et secrets** → ajoute deux **secrets** :
+   - `ADMIN_EMAIL` = ton e-mail
+   - `ADMIN_PASSWORD` = ton mot de passe (10 caractères minimum, lettres et chiffres)
+5. Ton lien est affiché sur la page du Worker : `https://calendrier-noel.<ton-nom>.workers.dev`. L'administration est sur `/admin`.
+
+> Le compte administrateur est créé la première fois que le site démarre avec ces deux secrets. Ensuite, change ton mot de passe depuis l'onglet **Compte**.
+
+**Limites de l'offre gratuite** : 100 000 requêtes par jour pour le serveur (les fichiers du site, comme les images, le CSS et le JS, ne comptent pas), et une base de 5 Go. C'est largement suffisant pour un calendrier communautaire.
+
+### Tester sur ton ordinateur (optionnel)
 ```bash
 npm install
-ADMIN_EMAIL=toi@exemple.fr ADMIN_PASSWORD=TonMotDePasse123 npm start
+printf 'ADMIN_EMAIL=toi@exemple.fr\nADMIN_PASSWORD=TonMotDePasse123\n' > .dev.vars
+npm run dev
 ```
-Ouvre ensuite http://localhost:3000 pour le calendrier et http://localhost:3000/admin pour l'administration.
-
-Si tu ne donnes pas `ADMIN_PASSWORD`, un mot de passe est créé automatiquement et affiché dans le terminal au premier lancement.
+Après avoir modifié un fichier du dossier `admin/`, lance `npm run build-admin`.
 
 **Tester avant décembre** : Admin → Réglages → « Date de test » (ex. 2026-12-07). Pense à la vider ensuite, car les viewers voient aussi cette date.
 
-## Mettre le site en ligne (exemple avec Railway ou Render)
-1. Mets ce dossier sur GitHub (sans `node_modules` ni `data`).
-2. Crée un nouveau service à partir du dépôt.
-   - Commande de démarrage : `npm start`
-3. Ajoute les variables d'environnement :
-   - `NODE_ENV=production`
-   - `ADMIN_EMAIL=ton e-mail`
-   - `ADMIN_PASSWORD=un mot de passe solide (10 caractères minimum, avec lettres et chiffres)`
-   - `DATA_DIR=/data`
-4. **Important** : ajoute un **disque ou volume persistant** monté sur `/data`. Sans lui, les participations seraient effacées à chaque redémarrage.
-5. Ouvre l'adresse fournie par l'hébergeur. Connecte-toi sur `/admin` et change ton mot de passe dans l'onglet Compte.
-
-Le site doit être servi en **HTTPS** (c'est automatique sur Railway et Render).
-
 ## Sécurité
-- Mots de passe chiffrés (scrypt). Les sessions sont stockées en base dans des cookies `httpOnly`, `SameSite=Strict` et `Secure` en production. Elles expirent après 12 h.
+- Mots de passe chiffrés (PBKDF2-SHA256). Les sessions sont stockées en base dans des cookies `HttpOnly`, `Secure` et `SameSite=Strict`. Elles expirent après 12 h.
 - Après 5 mauvaises tentatives de connexion, le compte est bloqué 15 minutes.
 - Chaque action d'administration est vérifiée côté serveur, avec un jeton anti-CSRF. La page admin et son code ne sont envoyés qu'aux administrateurs connectés.
 - En-têtes de sécurité : CSP, interdiction d'intégrer le site dans une autre page, nosniff.
@@ -64,14 +62,13 @@ Le site doit être servi en **HTTPS** (c'est automatique sur Railway et Render).
 - Les viewers ne voient jamais les données des autres participants.
 
 ## Sauvegarde
-Toutes les données sont dans `data/calendrier.db`. Copie ce fichier pour faire une sauvegarde.
+Toutes les données sont dans la base D1 `calendrier-noel-db` (tableau de bord Cloudflare → Storage & Databases → D1). Tu peux aussi exporter les participations en CSV depuis l'admin.
 
 ## Structure
 ```
-server.js          serveur et routes (public + admin)
-src/db.js          base de données et valeurs par défaut (lots)
-src/auth.js        connexion, sessions, sécurité
-src/dates.js       calcul du jour du calendrier (fuseau Europe/Paris)
-public/            site des viewers (calendrier, animations, musique)
-admin/             espace administrateur
+worker/index.js        serveur : routes, base de données, sécurité, lots par défaut
+worker/admin-bundle.js pages admin regroupées (généré depuis admin/)
+wrangler.jsonc         configuration Cloudflare
+public/                site des viewers (calendrier, animations, musique)
+admin/                 espace administrateur (sources)
 ```
