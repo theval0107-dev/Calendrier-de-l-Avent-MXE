@@ -32,6 +32,8 @@ const DEFAULT_SETTINGS = {
   music_url: '',
   music_track: 'jinglelive',
   creator_name: 'MXOU',
+  tiktok_url: 'https://www.tiktok.com/@maxousurfortnite',
+  discord_url: 'https://discord.gg/UxfcmGM9H',
 };
 
 const SCHEMA = `
@@ -353,6 +355,7 @@ async function handleApi(req, env, url, res) {
       musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'jinglelive',
       admin: isAdmin, creatorName: s.creator_name || 'MXOU', wins: wins.results,
       rules: { ...ticketRules(s), intro: s.rules_intro || '' },
+      socials: { tiktok: s.tiktok_url || '', discord: s.discord_url || '' },
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
         day: c.day, icon: c.icon, ...(isAdmin ? { participants: countMap[c.day] || 0 } : {}),
@@ -521,6 +524,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     try { new Intl.DateTimeFormat('fr', { timeZone: tz }); } catch { return res.error('Fuseau horaire invalide', 400); }
     const name = clean(b.app_name, 80);
     if (!name) return res.error('Le nom du calendrier est obligatoire', 400);
+    const socialUrl = (v) => { const u = cleanUrl(v); return u && u.startsWith('https://') ? u : ''; };
     const musicUrl = cleanUrl(b.music_url);
     if (musicUrl === null || (musicUrl && !musicUrl.startsWith('https://'))) return res.error('Le lien de la musique doit commencer par https://', 400);
     const int = (v, min, max, def) => { const n = Number(v); return Number.isInteger(n) && n >= min && n <= max ? String(n) : String(def); };
@@ -529,6 +533,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
       music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'jinglelive',
       creator_name: clean(b.creator_name, 40) || 'MXOU',
+      tiktok_url: socialUrl(b.tiktok_url), discord_url: socialUrl(b.discord_url),
       heart_t1_max: int(b.heart_t1_max, 1, 1000, 9), heart_t1_mult: int(b.heart_t1_mult, 0, 1000, 1),
       heart_t2_max: int(b.heart_t2_max, 1, 1000, 19), heart_t2_mult: int(b.heart_t2_mult, 0, 1000, 2),
       heart_t3_max: int(b.heart_t3_max, 1, 1000, 50), heart_t3_mult: int(b.heart_t3_mult, 0, 1000, 3),

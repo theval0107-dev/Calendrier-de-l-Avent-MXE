@@ -480,3 +480,23 @@ button.btn:disabled { opacity: .6; cursor: wait; }
 .rule li .val { font-family: var(--display); font-size: 17px; text-transform: uppercase; color: var(--or); }
 .big-num { font-family: var(--display); font-size: 40px !important; line-height: 1.1; color: #ffe6a3 !important; text-shadow: 0 0 16px rgba(230, 192, 104, .6); }
 .part-form label .req { justify-self: start; margin: 0; }
+
+/* ---------- Liens TikTok / Discord ---------- */
+.socials { margin: 26px auto 0; max-width: 680px; }
+.socials[hidden] { display: none; }
+.socials-title { margin: 0 0 12px; letter-spacing: .32em; text-transform: uppercase; font-size: 12px; font-weight: 600; color: var(--or); }
+.socials-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 560px) { .socials-row { grid-template-columns: 1fr; } }
+.social { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; text-decoration: none; color: var(--neige); text-align: left;
+  border: 1px solid rgba(255, 255, 255, .14); transition: transform .2s, box-shadow .2s; }
+.social[hidden] { display: none; }
+.social:hover { transform: translateY(-3px); }
+.social-tiktok { background: linear-gradient(135deg, rgba(37, 244, 238, .16), rgba(10, 10, 10, .85) 45%, rgba(254, 44, 85, .2)); box-shadow: -3px 0 0 rgba(37, 244, 238, .55), 3px 0 0 rgba(254, 44, 85, .55); }
+.social-tiktok:hover { box-shadow: -4px 0 0 #25f4ee, 4px 0 0 #fe2c55, 0 10px 24px rgba(0, 0, 0, .45); }
+.social-discord { background: linear-gradient(135deg, rgba(88, 101, 242, .5), rgba(40, 46, 120, .7)); box-shadow: 0 0 22px rgba(88, 101, 242, .35); }
+.social-discord:hover { box-shadow: 0 0 30px rgba(88, 101, 242, .6), 0 10px 24px rgba(0, 0, 0, .45); }
+.social-icon { font-size: 28px; flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; background: rgba(0, 0, 0, .3); }
+.social-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.social-text b { font-family: var(--display); font-weight: 400; font-size: 22px; text-transform: uppercase; letter-spacing: .02em; }
+.social-text small { font-size: 13px; color: rgba(247, 244, 236, .75); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-cta { flex: none; padding: 7px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #111; background: #fff; }

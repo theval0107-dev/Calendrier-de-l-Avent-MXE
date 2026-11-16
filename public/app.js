@@ -39,6 +39,7 @@ function render(data) {
 
   creatorName = data.creatorName || 'MXOU';
   renderRules(data.rules);
+  renderSocials(data.socials);
   const grid = $('grid');
   grid.replaceChildren();
   data.cases.forEach((c, i) => grid.append(buildCase(c, i)));
@@ -226,6 +227,19 @@ function updateEstimate() {
 }
 ['f-hearts', 'f-coins'].forEach((id) => $(id).addEventListener('input', updateEstimate));
 document.querySelectorAll('input[name=topfan]').forEach((r) => r.addEventListener('change', updateEstimate));
+
+function renderSocials(sc) {
+  if (!sc) return;
+  const tk = $('s-tiktok'), dc = $('s-discord');
+  tk.hidden = !sc.tiktok; dc.hidden = !sc.discord;
+  if (sc.tiktok) {
+    tk.href = sc.tiktok;
+    const m = /tiktok\.com\/(@[^/?#]+)/.exec(sc.tiktok);
+    $('s-tiktok-handle').textContent = m ? m[1] : 'Abonne-toi';
+  }
+  if (sc.discord) dc.href = sc.discord;
+  $('socials').hidden = !sc.tiktok && !sc.discord;
+}
 
 function renderRules(r) {
   rules = r;
