@@ -38,6 +38,38 @@
 
   <div class="toast" id="toast" role="alert" hidden></div>
 
+  <!-- Admin : participants d'une case -->
+  <div class="modal" id="plist" hidden>
+    <div class="modal-backdrop" data-close-plist></div>
+    <div class="modal-card plist-card" role="dialog" aria-modal="true" aria-labelledby="pl-title">
+      <button class="modal-close" data-close-plist aria-label="Fermer">×</button>
+      <p class="modal-day">Espace admin</p>
+      <h2 id="pl-title"></h2>
+      <p class="modal-note" id="pl-summary"></p>
+      <div class="plist-wrap">
+        <table class="plist">
+          <thead><tr><th>Pseudo TikTok</th><th>Cœurs</th><th>Top Fan</th><th>Tickets</th><th>Statut</th></tr></thead>
+          <tbody id="pl-rows"></tbody>
+        </table>
+      </div>
+      <a class="btn btn-ghost" href="/admin">Gérer dans l’espace admin</a>
+    </div>
+  </div>
+
+  <!-- Message pour le gagnant -->
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div class="win" id="win" hidden>
+    <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="win-title">
+      <div class="win-trophy" aria-hidden="true">🏆</div>
+      <p class="win-eyebrow">Félicitations</p>
+      <h2 id="win-title">Tu as gagné !</h2>
+      <p class="win-pseudo" id="win-pseudo"></p>
+      <div class="win-reward"><span>🎁 Ta récompense</span><strong id="win-reward"></strong></div>
+      <p class="win-text" id="win-text"></p>
+      <button class="btn" id="win-ok" type="button">Trop bien ! 🎉</button>
+    </div>
+  </div>
+
   <div class="modal" id="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="m-title">

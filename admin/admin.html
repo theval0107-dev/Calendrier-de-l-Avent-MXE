@@ -12,15 +12,16 @@
 <div class="layout">
   <nav class="side">
     <div class="brand">🎄 Administration</div>
+    <a class="back-home" href="/">← Retour au calendrier</a>
     <button class="tab active" data-tab="dashboard">Tableau de bord</button>
     <button class="tab" data-tab="participants">Participants & tickets</button>
-    <button class="tab" data-tab="draw">Tirage au sort</button>
+    <button class="tab" data-tab="draw">🎡 Roue du tirage</button>
     <button class="tab" data-tab="cases">Cases & lots</button>
     <button class="tab" data-tab="settings">Réglages</button>
     <button class="tab" data-tab="account">Compte</button>
     <div class="spacer"></div>
     <div class="who" id="who"></div>
-    <a class="view" href="/" target="_blank" rel="noopener">Voir le calendrier ↗</a>
+    <a class="view" href="/" target="_blank" rel="noopener">Ouvrir le calendrier dans un nouvel onglet ↗</a>
     <button class="tab" id="logout">Se déconnecter</button>
   </nav>
 
@@ -90,29 +91,61 @@
 
     <!-- Tirage -->
     <section data-panel="draw" hidden>
-      <h2>Tirage au sort</h2>
-      <p class="lead">Tire un gagnant parmi les participants d’un jour. Chaque ticket compte comme une chance.</p>
-      <div class="panel">
-        <div class="toolbar">
-          <label>Jour
+      <h2>Roue du tirage 🎡</h2>
+      <p class="lead">La roue se remplit avec les tickets de la case choisie. Tu peux aussi ajouter des pseudos à la main. Plus une personne a de tickets, plus sa part de roue est grande.</p>
+      <div class="wheel-layout">
+        <div class="panel wheel-panel">
+          <div class="wheel-box">
+            <div class="wheel-pointer" aria-hidden="true"></div>
+            <canvas id="wheel" width="560" height="560" aria-label="Roue du tirage"></canvas>
+            <button class="wheel-center" id="w-spin-center" type="button">TOURNER</button>
+          </div>
+          <div class="wheel-live" id="w-live">—</div>
+          <button class="btn-primary btn-big" id="w-spin" type="button">🎡 Faire tourner la roue</button>
+        </div>
+        <div class="panel wheel-controls">
+          <label>Case / jour
             <select id="d-day"></select>
           </label>
+          <p class="hint" id="d-reward"></p>
+          <label class="check"><input type="checkbox" id="w-auto" checked> Ajouter automatiquement les tickets de cette case</label>
           <label class="check"><input type="checkbox" id="d-validated" checked> Seulement les participations validées</label>
-          <label class="check"><input type="checkbox" id="d-exclude"> Exclure les gagnants précédents</label>
-          <button class="btn-primary" id="d-go">🎲 Lancer le tirage</button>
-        </div>
-        <div class="draw-stage">
-          <div class="muted" id="d-reward"></div>
-          <div class="draw-name" id="d-name">—</div>
-          <div class="draw-meta" id="d-meta"></div>
+          <label class="check"><input type="checkbox" id="d-exclude"> Exclure les gagnants déjà confirmés</label>
+          <hr>
+          <label>Ajouter un pseudo à la main
+            <span class="add-row"><input id="w-add-input" placeholder="pseudo TikTok" maxlength="40"><button class="btn" id="w-add" type="button">Ajouter</button></span>
+          </label>
+          <p class="hint">Astuce : tu peux coller plusieurs pseudos d’un coup, séparés par des virgules ou des retours à la ligne.</p>
+          <div class="chips" id="w-manual"></div>
+          <button class="btn-ghost" id="w-clear" type="button">Vider les ajouts manuels</button>
+          <hr>
+          <p class="wheel-count" id="w-count"></p>
         </div>
       </div>
+
       <div class="panel">
-        <h3>Historique des tirages</h3>
+        <h3>Gagnants confirmés</h3>
         <div class="table-wrap"><table>
-          <thead><tr><th>Jour</th><th>Lot</th><th>Gagnant</th><th>Code ticket</th><th>Date</th><th></th></tr></thead>
+          <thead><tr><th>Jour</th><th>Lot</th><th>Gagnant</th><th>Code ticket</th><th>Message sur le site</th><th>Date</th><th></th></tr></thead>
           <tbody id="d-history"></tbody>
         </table></div>
+      </div>
+
+      <div class="winner-overlay" id="w-result" hidden>
+        <canvas id="w-confetti" aria-hidden="true"></canvas>
+        <div class="winner-card">
+          <div class="winner-emoji">🎉</div>
+          <p class="winner-eyebrow">Le gagnant est</p>
+          <div class="winner-name" id="w-name"></div>
+          <p class="winner-meta" id="w-meta"></p>
+          <div class="winner-actions">
+            <button class="btn" id="w-copy" type="button">📋 Copier le pseudo</button>
+            <button class="btn-primary" id="w-confirm" type="button">✅ Confirmer ce gagnant</button>
+            <button class="btn" id="w-again" type="button">🔄 Relancer la roue</button>
+          </div>
+          <p class="winner-note" id="w-note"></p>
+          <button class="btn-ghost" id="w-close" type="button">Fermer</button>
+        </div>
       </div>
     </section>
 
@@ -133,6 +166,11 @@
           <label class="full">Nom du calendrier <input name="app_name" maxlength="80" required></label>
           <label class="full">Sous-titre <input name="subtitle" maxlength="200"></label>
           <label class="full">Texte du bas de page <input name="footer_text" maxlength="300"></label>
+        </div>
+        <h3 class="mt">Message au gagnant</h3>
+        <div class="form-grid">
+          <label class="full">Ton pseudo <span class="hint">Affiché dans le message du gagnant : « … t’a envoyé un message sur TikTok ».</span>
+            <input name="creator_name" maxlength="40" placeholder="MXOU"></label>
         </div>
         <h3 class="mt">Musique</h3>
         <div class="form-grid">

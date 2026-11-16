@@ -37,10 +37,13 @@ function render(data) {
   link.href = adminMode ? '/admin' : '/admin/login';
   link.querySelector('span').textContent = adminMode ? 'Ouvrir l’espace administrateur' : 'Se connecter en tant qu’administrateur';
 
+  creatorName = data.creatorName || 'MXOU';
   const grid = $('grid');
   grid.replaceChildren();
   data.cases.forEach((c, i) => grid.append(buildCase(c, i)));
+  if (data.wins && data.wins.length && !winShown) showWin(data.wins);
 }
+let creatorName = 'MXOU';
 
 let adminMode = false;
 function buildCase(c, index) {
@@ -75,7 +78,24 @@ function buildCase(c, index) {
   door.append(num, deco, tag);
   if (c.state !== 'aujourdhui' && !preview) door.insertAdjacentHTML('beforeend', `<span class="lock">${LOCK}</span>`);
 
-  btn.append(inside, door);
+  const blockMsg = document.createElement('span');
+  blockMsg.className = 'block-msg';
+  btn.append(inside, door, blockMsg);
+
+  // Admin : petit bouton au survol pour voir les participants de la case
+  if (adminMode) {
+    const cnt = document.createElement('span');
+    cnt.className = 'count-btn';
+    cnt.setAttribute('role', 'button');
+    cnt.tabIndex = 0;
+    cnt.title = 'Voir les participants';
+    cnt.textContent = `👥 ${c.participants || 0}`;
+    const openList = (e) => { e.stopPropagation(); e.preventDefault(); showParticipants(c.day); };
+    cnt.addEventListener('click', openList);
+    cnt.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') openList(e); });
+    btn.append(cnt);
+  }
+
   btn.addEventListener('click', () => openCase(btn, c));
   return btn;
 }
@@ -85,10 +105,15 @@ let busy = false;
 async function openCase(btn, c) {
   if (busy) return;
   if (c.state !== 'aujourdhui' && !adminMode) {
-    btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
+    // Case pas disponible : encadré rouge + grand message dans la case
+    const msg = btn.querySelector('.block-msg');
+    msg.textContent = c.state === 'passee' ? 'Case passée' : `⏳ Attends le ${c.day} déc.`;
+    btn.classList.remove('shake', 'bloquee'); void btn.offsetWidth; btn.classList.add('shake', 'bloquee');
+    clearTimeout(btn._blockTimer);
+    btn._blockTimer = setTimeout(() => btn.classList.remove('bloquee'), 3200);
     toast(c.state === 'passee'
-      ? 'Cette case est passée : seule la case du jour peut être ouverte.'
-      : `Patience ! Cette case s’ouvrira le ${c.day} ${MOIS}.`);
+      ? 'Trop tard ! Cette case est passée : seule la case du jour peut être ouverte.'
+      : `Il faut attendre jusqu’au ${c.day} ${MOIS} pour ouvrir cette case !`, true);
     return;
   }
   busy = true;
@@ -151,8 +176,8 @@ function showModal(c) {
   $('m-activate').hidden = true;
   $('ticket').hidden = true;
   $('m-preview').hidden = !c.preview;
-  if (c.preview) { /* aperçu admin : pas de participation */ }
-  else if (c.my_participation) showTicket(c.my_participation);
+  $('m-activate').textContent = c.admin ? 'Créer un ticket (admin)' : 'Activer ma récompense';
+  if (c.my_participation && !c.admin) showTicket(c.my_participation);
   else if (c.participation_open) $('m-activate').hidden = false;
   else $('m-closed').hidden = false;
 
@@ -213,20 +238,105 @@ function showTicket(p) {
   $('ticket').hidden = false;
 }
 
+// ---------- Admin : liste des participants d'une case ----------
+async function showParticipants(day) {
+  const box = $('plist');
+  $('pl-title').textContent = `Participants du ${day} ${MOIS}`;
+  const body = $('pl-rows');
+  body.replaceChildren();
+  $('pl-summary').textContent = 'Chargement…';
+  box.hidden = false;
+  try {
+    const res = await fetch(`/api/admin/participations?day=${day}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error();
+    const { participations } = await res.json();
+    const tickets = participations.reduce((a, p) => a + p.tickets, 0);
+    $('pl-summary').textContent = participations.length
+      ? `${participations.length} participant(s) · ${tickets} ticket(s) · ${participations.filter((p) => p.status === 'attente').length} à valider`
+      : 'Personne n’a encore participé pour cette case.';
+    const label = { attente: '⏳ À valider', validee: '✅ Validée', refusee: '❌ Refusée' };
+    for (const p of participations) {
+      const tr = document.createElement('tr');
+      const cells = [`@${p.pseudo}`, String(p.hearts), p.top_fan ? 'Oui' : 'Non', String(p.tickets), label[p.status] || p.status];
+      cells.forEach((txt, i) => {
+        const td = document.createElement('td');
+        if (i === 0) {
+          const a = document.createElement('a');
+          a.href = `https://www.tiktok.com/@${encodeURIComponent(p.pseudo)}`; a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.textContent = txt; td.append(a);
+        } else td.textContent = txt;
+        if (i === 4) td.className = `st ${p.status}`;
+        tr.append(td);
+      });
+      body.append(tr);
+    }
+  } catch {
+    $('pl-summary').textContent = 'Impossible de charger la liste. Reconnecte-toi à l’espace admin.';
+  }
+}
+
+// ---------- Message pour le gagnant ----------
+let winShown = false;
+function showWin(wins) {
+  winShown = true;
+  const w = wins[wins.length - 1];
+  $('win-pseudo').textContent = `@${w.pseudo}`;
+  $('win-reward').textContent = wins.map((x) => `${x.reward} (${x.day} ${MOIS})`).join(' · ');
+  $('win-text').textContent = `${creatorName} t’a normalement envoyé un message sur TikTok, ou il va bientôt le faire, pour récupérer ta récompense. Garde un œil sur tes messages !`;
+  $('win').hidden = false;
+  confetti();
+  music?.play();
+}
+$('win-ok').addEventListener('click', async () => {
+  $('win').hidden = true;
+  try { await fetch('/api/wins/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {}
+});
+
+function confetti() {
+  if (reducedMotion) return;
+  const canvas = $('confetti');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = innerWidth, H = canvas.height = innerHeight;
+  const colors = ['#e6c068', '#fff3c4', '#c8102e', '#f7f4ec', '#2f8a5b', '#25f4ee', '#fe2c55'];
+  const parts = Array.from({ length: 220 }, () => ({
+    x: Math.random() * W, y: -20 - Math.random() * H, w: 6 + Math.random() * 8, h: 8 + Math.random() * 10,
+    vy: 2 + Math.random() * 3.5, vx: -1.5 + Math.random() * 3, r: Math.random() * Math.PI, vr: -.1 + Math.random() * .2,
+    c: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const end = performance.now() + 9000;
+  (function frame(now) {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of parts) {
+      p.y += p.vy; p.x += p.vx + Math.sin(p.y / 40); p.r += p.vr;
+      if (p.y > H + 20 && now < end) { p.y = -20; p.x = Math.random() * W; }
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    }
+    if (now < end + 4000 && !$('win').hidden) requestAnimationFrame(frame); else ctx.clearRect(0, 0, W, H);
+  })(performance.now());
+}
+
 function closeModal() {
   $('modal').hidden = true;
   document.querySelectorAll('.case.ouverte').forEach((b) => b.classList.remove('ouverte'));
   lastFocus?.focus();
 }
-document.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-close-plist]')) { $('plist').hidden = true; return; }
+  if (e.target.closest('[data-close]')) closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('plist').hidden) $('plist').hidden = true;
+  else if (!$('modal').hidden) closeModal();
+});
 
 // ---------- Utilitaires ----------
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let toastTimer;
-function toast(msg) {
+function toast(msg, big = false) {
   const t = $('toast');
   t.textContent = msg; t.hidden = false;
+  t.classList.toggle('big', big);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
 }

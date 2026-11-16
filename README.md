@@ -16,7 +16,8 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 - Une fois connecté, tu peux **ouvrir toutes les cases en avance** sur le calendrier (aperçu).
 - **Tableau de bord** : visiteurs du jour et au total, pages vues, participants, tickets, et le détail jour par jour.
 - **Participants & tickets** : la liste complète (pseudo, cœurs, Top Fan, tickets, code, statut). Chaque participation arrive « à valider » : tu la **valides** ou la **refuses** après vérification sur TikTok, une par une ou toutes d'un coup pour un jour. Il y a aussi une recherche et un export Excel/CSV. Le viewer voit le statut de son ticket.
-- **Tirage au sort** : un gagnant par jour parmi les participations **validées**, avec une chance par ticket. Historique des tirages et possibilité d'annuler.
+- **Roue du tirage** : la roue se remplit avec les tickets **validés** de la case, chaque ticket donnant une part de roue. Tu peux aussi ajouter des pseudos à la main. Tu fais tourner la roue, le gagnant s'affiche en grand avec un bouton pour copier son pseudo, et tu peux relancer autant de fois que tu veux. Quand tu **confirmes** un gagnant, il voit un grand message animé « Tu as gagné ! » à sa prochaine visite sur le site (sauf les pseudos ajoutés à la main).
+- Sur le calendrier, en mode admin : toutes les cases s'ouvrent en avance, tu peux créer des tickets, et le bouton 👥 sur chaque case montre ses participants.
 - **Cases & lots** : titre, message, lot, image, lien et décoration de chaque case.
 - **Réglages** : nom du calendrier, textes, année, musique (tu peux mettre ton propre MP3), date de test, ouverture et fermeture des participations, règles des tickets.
 - **Compte** : changer l'e-mail et le mot de passe.

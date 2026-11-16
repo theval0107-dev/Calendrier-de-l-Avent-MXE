@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS = {
   music_enabled: '1',
   music_url: '',
   music_track: 'deckhalls',
+  creator_name: 'MXOU',
 };
 
 const SCHEMA = `
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS participations (id INTEGER PRIMARY KEY AUTOINCREMENT,
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_pseudo ON participations(day, pseudo COLLATE NOCASE);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_visitor ON participations(day, visitor_id);
 CREATE TABLE IF NOT EXISTS visits (date TEXT NOT NULL, visitor_id TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, visitor_id));
-CREATE TABLE IF NOT EXISTS draws (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, participation_id INTEGER NOT NULL, pseudo TEXT NOT NULL, ticket_code TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS draws (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, participation_id INTEGER NOT NULL, pseudo TEXT NOT NULL, ticket_code TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, seen INTEGER NOT NULL DEFAULT 0, manual INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS opens (day INTEGER NOT NULL, date TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, date));
 CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, first INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0);
 `;
@@ -144,7 +145,12 @@ async function init(env) {
   }
   await db.batch(stmts);
   // Mise à jour d'une base créée avec une version précédente
-  try { await db.prepare("ALTER TABLE participations ADD COLUMN status TEXT NOT NULL DEFAULT 'attente'").run(); } catch { /* déjà présente */ }
+  for (const sql of [
+    "ALTER TABLE participations ADD COLUMN status TEXT NOT NULL DEFAULT 'attente'",
+    'ALTER TABLE draws ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE draws ADD COLUMN seen INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE draws ADD COLUMN manual INTEGER NOT NULL DEFAULT 0',
+  ]) { try { await db.prepare(sql).run(); } catch { /* colonne déjà présente */ } }
   // Passage à « Deck the Halls » comme musique (une seule fois, ensuite le choix des Réglages est respecté)
   if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_music_v2'").first())) {
     await db.batch([
@@ -283,17 +289,22 @@ async function handleApi(req, env, url, res) {
     const t = calendarToday(s);
     const vid = visitorId(req, res);
     const isAdmin = Boolean(await currentSession(req, db));
-    const [, icons] = await db.batch([
+    const [, icons, wins, counts] = await db.batch([
       db.prepare('INSERT INTO visits (date, visitor_id) VALUES (?, ?) ON CONFLICT(date, visitor_id) DO UPDATE SET views = views + 1').bind(t.date, vid),
       db.prepare('SELECT day, icon FROM cases ORDER BY day'),
+      // Gains confirmés de ce visiteur, pas encore annoncés
+      db.prepare(`SELECT d.id, d.day, d.pseudo, c.reward FROM draws d JOIN participations p ON p.id = d.participation_id JOIN cases c ON c.day = d.day
+        WHERE p.visitor_id = ? AND d.confirmed = 1 AND d.seen = 0 AND d.manual = 0 ORDER BY d.day`).bind(vid),
+      db.prepare("SELECT day, COUNT(*) AS n FROM participations WHERE status != 'refusee' GROUP BY day"),
     ]);
+    const countMap = isAdmin ? Object.fromEntries(counts.results.map((r) => [r.day, r.n])) : null;
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
       musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'deckhalls',
-      admin: isAdmin,
+      admin: isAdmin, creatorName: s.creator_name || 'MXOU', wins: wins.results,
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
-        day: c.day, icon: c.icon,
+        day: c.day, icon: c.icon, ...(isAdmin ? { participants: countMap[c.day] || 0 } : {}),
         state: t.day === null ? (t.status === 'apres' ? 'passee' : 'future') : c.day === t.day ? 'aujourdhui' : c.day < t.day ? 'passee' : 'future',
       })),
     });
@@ -323,19 +334,31 @@ async function handleApi(req, env, url, res) {
     const [c, mine] = await db.batch(queries);
     return res.json({
       ...c.results[0], preview: !isToday,
-      participation_open: isToday && s.participation_open === '1',
+      participation_open: (isToday && s.participation_open === '1') || isAdmin,
+      admin: isAdmin,
       my_participation: mine.results[0] || null,
     });
+  }
+
+  if (p === '/api/wins/seen' && m === 'POST') {
+    const vid = visitorId(req, res);
+    await db.prepare(`UPDATE draws SET seen = 1 WHERE confirmed = 1 AND participation_id IN (SELECT id FROM participations WHERE visitor_id = ?)`).bind(vid).run();
+    return res.json({ ok: true });
   }
 
   if ((mm = p.match(/^\/api\/participate\/(\d+)$/)) && m === 'POST') {
     const day = Number(mm[1]);
     const s = await getSettings(db);
     const t = calendarToday(s);
-    if (t.day !== day) return res.error('Tu ne peux participer qu’à la case du jour.', 403);
-    if (s.participation_open !== '1') return res.error('Les participations sont fermées pour le moment.', 403);
-    if (await blockedMinutes(db, [`part:${ip}`])) return res.error('Trop de tentatives, réessaie plus tard.', 429);
-    await hit(db, `part:${ip}`, 20, 3600 * 1000, 3600 * 1000);
+    // Un administrateur peut créer des tickets pour n'importe quelle case (tests, ajouts)
+    const isAdmin = Boolean(await currentSession(req, db));
+    if (day < 1 || day > 24) return res.error('Case invalide', 400);
+    if (!isAdmin) {
+      if (t.day !== day) return res.error('Tu ne peux participer qu’à la case du jour.', 403);
+      if (s.participation_open !== '1') return res.error('Les participations sont fermées pour le moment.', 403);
+      if (await blockedMinutes(db, [`part:${ip}`])) return res.error('Trop de tentatives, réessaie plus tard.', 429);
+      await hit(db, `part:${ip}`, 20, 3600 * 1000, 3600 * 1000);
+    }
 
     const b = await readJson(req);
     const pseudo = clean(b.pseudo, 40).replace(/^@+/, '');
@@ -344,11 +367,12 @@ async function handleApi(req, env, url, res) {
     if (!Number.isInteger(hearts) || hearts < 0 || hearts > 1000000) return res.error('Nombre de cœurs invalide.', 400);
     const topFan = b.top_fan === true;
 
-    const vid = visitorId(req, res);
-    const already = await db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid).first();
+    // Pour l'admin, chaque ticket a son propre identifiant (il peut en créer plusieurs)
+    const vid = isAdmin ? `admin-${randomToken(12)}` : visitorId(req, res);
+    const already = isAdmin ? null : await db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid).first();
     if (already) return res.json({ error: 'Tu as déjà activé ta récompense aujourd’hui.', my_participation: already }, 409);
     if (await db.prepare('SELECT 1 AS x FROM participations WHERE day = ? AND pseudo = ? COLLATE NOCASE').bind(day, pseudo).first()) {
-      return res.error('Ce pseudo a déjà participé aujourd’hui.', 409);
+      return res.error(isAdmin ? 'Ce pseudo a déjà un ticket pour cette case.' : 'Ce pseudo a déjà participé aujourd’hui.', 409);
     }
     const tickets = computeTickets(s, hearts, topFan);
     for (let i = 0; i < 5; i++) {
@@ -448,6 +472,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
       music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'deckhalls',
+      creator_name: clean(b.creator_name, 40) || 'MXOU',
       tickets_base: int(b.tickets_base, 1, 100, 1), tickets_topfan_bonus: int(b.tickets_topfan_bonus, 0, 100, 0),
       tickets_hearts_step: int(b.tickets_hearts_step, 0, 1000000, 0), tickets_max: int(b.tickets_max, 1, 1000, 10),
     };
@@ -476,7 +501,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
           (SELECT COUNT(*) FROM participations p WHERE p.day = c.day AND p.status = 'attente') AS pending,
           (SELECT COALESCE(SUM(tickets),0) FROM participations p WHERE p.day = c.day) AS tickets,
           (SELECT COALESCE(SUM(count),0) FROM opens o WHERE o.day = c.day) AS opens,
-          (SELECT pseudo FROM draws d WHERE d.day = c.day ORDER BY id DESC LIMIT 1) AS winner
+          (SELECT GROUP_CONCAT(pseudo, ', ') FROM draws d WHERE d.day = c.day AND d.confirmed = 1) AS winner
         FROM cases c ORDER BY c.day`),
     ]);
     const n = (i) => r[i].results[0].n;
@@ -523,25 +548,54 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     return res.json({ ok: true });
   }
 
+  // Liste des pseudos pour la roue : participations du jour (+ ajouts manuels)
+  async function wheelEntries(day, b) {
+    const onlyValidated = b.validated_only !== false;
+    let rows = [];
+    if (b.include_auto !== false) {
+      rows = (await db.prepare(`SELECT id, pseudo, tickets, ticket_code FROM participations WHERE day = ?${onlyValidated ? " AND status = 'validee'" : " AND status != 'refusee'"} ORDER BY id`).bind(day).all()).results;
+    }
+    const seen = new Set(rows.map((r) => r.pseudo.toLowerCase()));
+    const manual = Array.isArray(b.manual) ? b.manual : [];
+    for (const raw of manual.slice(0, 500)) {
+      const name = clean(raw, 40).replace(/^@+/, '');
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      rows.push({ id: 0, pseudo: name, tickets: 1, ticket_code: '', manual: true });
+    }
+    if (b.exclude_previous_winners === true) {
+      const won = new Set((await db.prepare('SELECT pseudo FROM draws WHERE confirmed = 1').all()).results.map((r) => r.pseudo.toLowerCase()));
+      rows = rows.filter((r) => !won.has(r.pseudo.toLowerCase()));
+    }
+    return rows;
+  }
+
+  if ((mm = p.match(/^\/api\/admin\/wheel\/(\d+)$/)) && m === 'POST') {
+    const day = Number(mm[1]);
+    if (day < 1 || day > 24) return res.error('Case invalide', 400);
+    return res.json({ entries: await wheelEntries(day, await readJson(req)) });
+  }
+
   if ((mm = p.match(/^\/api\/admin\/draw\/(\d+)$/)) && m === 'POST') {
     const day = Number(mm[1]);
     if (day < 1 || day > 24) return res.error('Case invalide', 400);
     const b = await readJson(req);
-    const onlyValidated = b.validated_only !== false;
-    let rows = (await db.prepare(`SELECT id, pseudo, tickets, ticket_code FROM participations WHERE day = ?${onlyValidated ? " AND status = 'validee'" : " AND status != 'refusee'"}`).bind(day).all()).results;
-    if (b.exclude_previous_winners === true) {
-      const won = new Set((await db.prepare('SELECT pseudo FROM draws').all()).results.map((r) => r.pseudo.toLowerCase()));
-      rows = rows.filter((r) => !won.has(r.pseudo.toLowerCase()));
-    }
-    if (!rows.length) return res.error(onlyValidated ? 'Aucune participation validée pour ce jour. Valide des participations d’abord.' : 'Aucun participant éligible pour ce jour.', 400);
-    const total = rows.reduce((a, r) => a + r.tickets, 0);
+    const entries = await wheelEntries(day, b);
+    if (!entries.length) return res.error('La roue est vide : valide des participations ou ajoute des pseudos à la main.', 400);
+    const total = entries.reduce((a, r) => a + r.tickets, 0);
     let pick = randomInt(total);
-    const winner = rows.find((r) => (pick -= r.tickets) < 0);
-    await db.prepare('INSERT INTO draws (day, participation_id, pseudo, ticket_code) VALUES (?, ?, ?, ?)').bind(day, winner.id, winner.pseudo, winner.ticket_code).run();
-    return res.json({ ok: true, winner: { ...winner, total_tickets: total, participants: rows.length } });
+    const index = entries.findIndex((r) => (pick -= r.tickets) < 0);
+    const w = entries[index];
+    const ins = await db.prepare('INSERT INTO draws (day, participation_id, pseudo, ticket_code, manual) VALUES (?, ?, ?, ?, ?)')
+      .bind(day, w.id, w.pseudo, w.ticket_code || '', w.manual ? 1 : 0).run();
+    return res.json({ ok: true, entries, index, draw_id: ins.meta.last_row_id, winner: { ...w, total_tickets: total, participants: entries.length } });
+  }
+  if ((mm = p.match(/^\/api\/admin\/draws\/(\d+)\/confirm$/)) && m === 'POST') {
+    await db.prepare('UPDATE draws SET confirmed = 1 WHERE id = ?').bind(Number(mm[1])).run();
+    return res.json({ ok: true });
   }
   if (p === '/api/admin/draws' && m === 'GET') {
-    const { results } = await db.prepare('SELECT d.*, c.reward FROM draws d JOIN cases c ON c.day = d.day ORDER BY d.id DESC').all();
+    const { results } = await db.prepare('SELECT d.*, c.reward FROM draws d JOIN cases c ON c.day = d.day WHERE d.confirmed = 1 ORDER BY d.id DESC').all();
     return res.json({ draws: results });
   }
   if ((mm = p.match(/^\/api\/admin\/draws\/(\d+)$/)) && m === 'DELETE') {
