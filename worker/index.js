@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS = {
   tickets_max: '10',
   music_enabled: '1',
   music_url: '',
-  music_track: 'wewish',
+  music_track: 'deckhalls',
 };
 
 const SCHEMA = `
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL,
 const SESSION_MS = 12 * 3600 * 1000;
 const PBKDF2_ITER = 20000;
 const STATUSES = ['attente', 'validee', 'refusee'];
-const MUSIC_TRACKS = ['wewish', 'jingle', 'doucenuit'];
+const MUSIC_TRACKS = ['deckhalls', 'wewish', 'jingle', 'doucenuit'];
 
 // =====================================================================
 //  Utilitaires
@@ -145,6 +145,13 @@ async function init(env) {
   await db.batch(stmts);
   // Mise à jour d'une base créée avec une version précédente
   try { await db.prepare("ALTER TABLE participations ADD COLUMN status TEXT NOT NULL DEFAULT 'attente'").run(); } catch { /* déjà présente */ }
+  // Passage à « Deck the Halls » comme musique (une seule fois, ensuite le choix des Réglages est respecté)
+  if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_music_v2'").first())) {
+    await db.batch([
+      db.prepare("UPDATE settings SET value = 'deckhalls' WHERE key = 'music_track'"),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_music_v2', '1')"),
+    ]);
+  }
 
   // Code administrateur : vient du secret Cloudflare ADMIN_CODE (ou ADMIN_PASSWORD).
   // Si le secret change, le code est remplacé. Sinon, le code choisi dans l'onglet Compte est gardé.
@@ -282,7 +289,7 @@ async function handleApi(req, env, url, res) {
     ]);
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
-      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'wewish',
+      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'deckhalls',
       admin: isAdmin,
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
@@ -440,7 +447,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const values = {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
-      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'wewish',
+      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'deckhalls',
       tickets_base: int(b.tickets_base, 1, 100, 1), tickets_topfan_bonus: int(b.tickets_topfan_bonus, 0, 100, 0),
       tickets_hearts_step: int(b.tickets_hearts_step, 0, 1000000, 0), tickets_max: int(b.tickets_max, 1, 1000, 10),
     };

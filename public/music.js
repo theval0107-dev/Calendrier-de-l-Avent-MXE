@@ -3,6 +3,7 @@
 //  - « We Wish You a Merry Christmas » (chant traditionnel anglais)
 //  - « Jingle Bells » (J. L. Pierpont, 1857)
 //  - « Douce nuit » (F. X. Gruber, 1818)
+//  - « Deck the Halls » (chant traditionnel gallois)
 // Si un MP3 est configuré dans l'admin, il est utilisé à la place.
 // Les navigateurs interdisent le son avant une interaction : la musique démarre au premier clic / toucher.
 
@@ -16,6 +17,34 @@ function freq(note) {
 
 // Chaque morceau : unité de temps (secondes), mélodie et basse sous forme [note, durée]
 const TRACKS = {
+  deckhalls: {
+    unit: 0.32,
+    melody: (() => {
+      const a = [
+        ['C6', 1.5], ['Bb5', .5], ['A5', 1], ['G5', 1],
+        ['F5', 1], ['G5', 1], ['A5', 1], ['F5', 1],
+        ['G5', .5], ['A5', .5], ['Bb5', .5], ['G5', .5], ['A5', 1.5], ['G5', .5],
+        ['F5', 1], ['E5', 1], ['F5', 2],
+      ];
+      return [
+        ...a, ...a,
+        ['G5', 1.5], ['A5', .5], ['Bb5', 1], ['G5', 1],
+        ['A5', 1.5], ['Bb5', .5], ['C6', 1], ['G5', 1],
+        ['A5', .5], ['B5', .5], ['C6', 1], ['D6', .5], ['E6', .5], ['F6', 1],
+        ['E6', 1], ['D6', 1], ['C6', 2],
+        ['C6', 1.5], ['Bb5', .5], ['A5', 1], ['G5', 1],
+        ['F5', 1], ['G5', 1], ['A5', 1], ['F5', 1],
+        ['D6', .5], ['D6', .5], ['D6', .5], ['D6', .5], ['C6', 1.5], ['Bb5', .5],
+        ['A5', 1], ['G5', 1], ['F5', 2], ['-', 2],
+      ];
+    })(),
+    bass: [
+      ...[['F3', 2], ['C3', 2], ['F3', 2], ['C3', 2], ['C3', 2], ['G3', 2], ['C3', 2], ['F3', 2]],
+      ...[['F3', 2], ['C3', 2], ['F3', 2], ['C3', 2], ['C3', 2], ['G3', 2], ['C3', 2], ['F3', 2]],
+      ['C3', 2], ['G3', 2], ['F3', 2], ['C3', 2], ['C3', 2], ['G3', 2], ['G3', 2], ['C3', 2],
+      ['F3', 2], ['C3', 2], ['F3', 2], ['C3', 2], ['Bb3', 2], ['F3', 2], ['C3', 2], ['F3', 2], ['-', 2],
+    ],
+  },
   wewish: {
     unit: 0.4,
     melody: [
@@ -76,7 +105,7 @@ const TRACKS = {
 const VOLUME = 0.16;
 
 export function createMusic({ url, track } = {}) {
-  const T = TRACKS[track] || TRACKS.wewish;
+  const T = TRACKS[track] || TRACKS.deckhalls;
   let ctx = null, master = null, playing = false, timer = null, audioEl = null;
 
   function chime(f, t, dur, vol) {

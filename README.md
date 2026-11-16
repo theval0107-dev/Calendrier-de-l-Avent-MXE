@@ -10,7 +10,7 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 - À l'ouverture : animation de la porte, étincelles dorées, puis le lot du jour.
 - Bouton **« Activer ma récompense »** : le viewer donne son pseudo TikTok, son nombre de cœurs du jour et s'il est Top Fan. Il reçoit un ticket (ex. `J07-K3QFZ`).
 - Une seule participation par jour, par pseudo et par appareil.
-- Musique de Noël (We Wish You a Merry Christmas, Jingle Bells ou Douce nuit, au choix dans les Réglages) : elle démarre au premier clic, car les navigateurs bloquent le son avant, et se coupe avec un bouton.
+- Musique de Noël (Deck the Halls, We Wish You a Merry Christmas, Jingle Bells ou Douce nuit, au choix dans les Réglages) : elle démarre au premier clic, car les navigateurs bloquent le son avant, et se coupe avec un bouton.
 
 **Côté administrateur** (bouton en haut à gauche ou `/admin`, protégé par un code)
 - Une fois connecté, tu peux **ouvrir toutes les cases en avance** sur le calendrier (aperçu).
