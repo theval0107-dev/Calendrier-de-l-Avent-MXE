@@ -38,6 +38,7 @@ function render(data) {
   link.querySelector('span').textContent = adminMode ? 'Ouvrir l’espace administrateur' : 'Se connecter en tant qu’administrateur';
 
   creatorName = data.creatorName || 'MXOU';
+  renderRules(data.rules);
   const grid = $('grid');
   grid.replaceChildren();
   data.cases.forEach((c, i) => grid.append(buildCase(c, i)));
@@ -159,15 +160,24 @@ function burst(el) {
 // ---------- Fenêtre de la surprise ----------
 let lastFocus = null;
 function showModal(c) {
-  $('m-day').textContent = `${c.day} ${MOIS}`;
-  $('m-title').textContent = c.title || `Surprise du ${c.day} ${MOIS}`;
-  $('m-message').textContent = c.message;
-
+  // Carte du lot (style de la vidéo)
+  const special = c.day >= 22;
+  const prize = $('prize');
+  prize.className = `prize accent-${c.accent || 'or'}${special ? ' special' : ''}${c.image_url ? ' has-img' : ''}`;
+  $('p-last').hidden = !special;
+  $('m-day').textContent = c.day;
+  $('m-reward').textContent = c.reward || `Surprise du ${c.day} ${MOIS}`;
+  const pill = $('p-pill');
+  pill.textContent = c.subtitle || '';
+  pill.hidden = !c.subtitle;
   const img = $('m-image');
-  if (c.image_url) { img.src = c.image_url; img.hidden = false; } else { img.hidden = true; img.removeAttribute('src'); }
+  if (c.image_url) { img.src = c.image_url; img.alt = c.reward || ''; img.hidden = false; } else { img.hidden = true; img.removeAttribute('src'); }
 
-  $('m-reward-wrap').hidden = !c.reward;
-  $('m-reward').textContent = c.reward;
+  // Le titre par défaut (« Case du X décembre ») n'est pas répété sous la carte
+  const showTitle = c.title && c.title !== `Case du ${c.day} décembre`;
+  $('m-title').textContent = showTitle ? c.title : '';
+  $('m-title').hidden = !showTitle;
+  $('m-message').textContent = c.message;
 
   currentDay = c.day;
   $('part-form').hidden = true;
@@ -195,8 +205,47 @@ let currentDay = null;
 $('m-activate').addEventListener('click', () => {
   $('m-activate').hidden = true;
   $('part-form').hidden = false;
+  $('f-certify').checked = false;
+  updateEstimate();
   $('f-pseudo').focus();
 });
+
+// Estimation des tickets en direct, selon les règles fixées dans l'admin
+let rules = null;
+function ticketsFor(level, fan, coins) {
+  if (!rules || !level) return 0;
+  const tier = rules.tiers.find(([max]) => level <= max) || rules.tiers[rules.tiers.length - 1];
+  return level * tier[1] + (fan ? rules.superfan : 0) + (rules.coinsPer > 0 ? Math.floor(coins / rules.coinsPer) : 0);
+}
+function updateEstimate() {
+  const level = Number($('f-hearts').value) || 0;
+  const fan = document.querySelector('input[name=topfan]:checked')?.value === 'oui';
+  const coins = Number($('f-coins').value) || 0;
+  const n = ticketsFor(level, fan, coins);
+  $('f-estimate').textContent = n ? `🎟️ Tu vas recevoir ${n} ticket${n > 1 ? 's' : ''} (+ les tickets mérite éventuels)` : 'Indique le niveau de ton Cœur du jour pour voir tes tickets.';
+}
+['f-hearts', 'f-coins'].forEach((id) => $(id).addEventListener('input', updateEstimate));
+document.querySelectorAll('input[name=topfan]').forEach((r) => r.addEventListener('change', updateEstimate));
+
+function renderRules(r) {
+  rules = r;
+  if (!r) return;
+  $('rules-intro').textContent = r.intro || '';
+  let min = 1;
+  $('rules-hearts').replaceChildren(...r.tiers.map(([max, mult]) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="lvl"></span><span class="val"></span>';
+    li.querySelector('.lvl').textContent = `Niveau ${min} à ${max}`;
+    li.querySelector('.val').textContent = `${mult} ticket${mult > 1 ? 's' : ''} par niveau`;
+    min = max + 1;
+    return li;
+  }));
+  $('rules-fan').textContent = `+${r.superfan} tickets`;
+  $('rules-coins').textContent = r.coinsPer > 0 ? `Chaque tranche de ${r.coinsPer} pièces envoyées = 1 ticket en plus.` : 'Les cadeaux ne donnent pas de tickets pour le moment.';
+  const maxLvl = r.tiers[r.tiers.length - 1][0];
+  $('f-hearts').max = maxLvl;
+  $('f-hearts').placeholder = `de 1 à ${maxLvl}`;
+}
 
 $('part-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -204,17 +253,21 @@ $('part-form').addEventListener('submit', async (e) => {
   err.hidden = true;
   const pseudo = $('f-pseudo').value.trim().replace(/^@+/, '');
   const hearts = $('f-hearts').value.trim();
+  const coins = $('f-coins').value.trim() || '0';
   const topFan = document.querySelector('input[name=topfan]:checked')?.value === 'oui';
+  const maxLvl = Number($('f-hearts').max) || 50;
 
   if (!/^[A-Za-z0-9._]{2,24}$/.test(pseudo)) return showError('Écris ton pseudo TikTok (lettres, chiffres, points et _ uniquement).');
-  if (!/^\d{1,7}$/.test(hearts)) return showError('Indique ton nombre de cœurs du jour (un nombre, 0 si aucun).');
+  if (!/^\d{1,4}$/.test(hearts) || Number(hearts) < 1 || Number(hearts) > maxLvl) return showError(`Indique le niveau de ton Cœur du jour (obligatoire, de 1 à ${maxLvl}).`);
+  if (!/^\d{1,8}$/.test(coins)) return showError('Indique le nombre de pièces envoyées (0 si aucune).');
+  if (!$('f-certify').checked) return showError('Coche la case pour certifier que tes informations sont exactes.');
 
   const btn = $('f-submit');
   btn.disabled = true;
   try {
     const res = await fetch(`/api/participate/${currentDay}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pseudo, hearts: Number(hearts), top_fan: topFan }),
+      body: JSON.stringify({ pseudo, hearts: Number(hearts), top_fan: topFan, coins: Number(coins), certify: true }),
     });
     const data = await res.json();
     if (data.my_participation) { $('part-form').hidden = true; showTicket(data.my_participation); burst($('ticket')); return; }
@@ -257,7 +310,7 @@ async function showParticipants(day) {
     const label = { attente: '⏳ À valider', validee: '✅ Validée', refusee: '❌ Refusée' };
     for (const p of participations) {
       const tr = document.createElement('tr');
-      const cells = [`@${p.pseudo}`, String(p.hearts), p.top_fan ? 'Oui' : 'Non', String(p.tickets), label[p.status] || p.status];
+      const cells = [`@${p.pseudo}`, `Niv. ${p.hearts}`, p.top_fan ? 'Oui' : 'Non', String(p.coins || 0), String(p.tickets), label[p.status] || p.status];
       cells.forEach((txt, i) => {
         const td = document.createElement('td');
         if (i === 0) {
@@ -265,7 +318,7 @@ async function showParticipants(day) {
           a.href = `https://www.tiktok.com/@${encodeURIComponent(p.pseudo)}`; a.target = '_blank'; a.rel = 'noopener noreferrer';
           a.textContent = txt; td.append(a);
         } else td.textContent = txt;
-        if (i === 4) td.className = `st ${p.status}`;
+        if (i === 5) td.className = `st ${p.status}`;
         tr.append(td);
       });
       body.append(tr);
@@ -401,6 +454,23 @@ function setupMusic(data) {
   refresh();
 }
 
+// Petites étoiles dorées qui scintillent (comme dans la vidéo)
+function twinkles() {
+  if (reducedMotion) return;
+  const box = $('twinkles');
+  for (let i = 0; i < 26; i++) {
+    const t = document.createElement('span');
+    t.textContent = '✦';
+    t.style.left = `${Math.random() * 100}%`;
+    t.style.top = `${Math.random() * 100}%`;
+    t.style.fontSize = `${8 + Math.random() * 16}px`;
+    t.style.animationDelay = `${Math.random() * 4}s`;
+    t.style.animationDuration = `${2.5 + Math.random() * 3}s`;
+    box.append(t);
+  }
+}
+
+twinkles();
 snow();
 load();
 // Si la page reste ouverte, on rafraîchit pour passer automatiquement au jour suivant

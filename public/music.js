@@ -4,6 +4,7 @@
 //  - « Jingle Bells » (J. L. Pierpont, 1857)
 //  - « Douce nuit » (F. X. Gruber, 1818)
 //  - « Deck the Halls » (chant traditionnel gallois)
+// La piste « jinglelive » reprend l'ambiance de la vidéo de présentation (Jingle Bells, 120 bpm, grelots).
 // Si un MP3 est configuré dans l'admin, il est utilisé à la place.
 // Les navigateurs interdisent le son avant une interaction : la musique démarre au premier clic / toucher.
 
@@ -16,7 +17,38 @@ function freq(note) {
 }
 
 // Chaque morceau : unité de temps (secondes), mélodie et basse sous forme [note, durée]
+const JINGLE_CHORUS = (() => {
+  const a = [['E5', 1], ['E5', 1], ['E5', 2], ['E5', 1], ['E5', 1], ['E5', 2], ['E5', 1], ['G5', 1], ['C5', 1.5], ['D5', .5], ['E5', 4]];
+  return [
+    ...a,
+    ['F5', 1], ['F5', 1], ['F5', 1.5], ['F5', .5], ['F5', 1], ['E5', 1], ['E5', 1], ['E5', .5], ['E5', .5],
+    ['E5', 1], ['D5', 1], ['D5', 1], ['E5', 1], ['D5', 2], ['G5', 2],
+    ...a,
+    ['F5', 1], ['F5', 1], ['F5', 1], ['F5', 1], ['F5', 1], ['E5', 1], ['E5', 1], ['E5', .5], ['E5', .5],
+    ['G5', 1], ['G5', 1], ['F5', 1], ['D5', 1], ['C5', 4],
+  ];
+})();
+const JINGLE_CHORDS = ['C', 'C', 'C', 'C', 'F', 'C', 'G', 'G', 'C', 'C', 'C', 'C', 'F', 'C', 'G', 'C'];
+
 const TRACKS = {
+  // Comme la vidéo : intro en arpèges, puis « Jingle Bells » à 120 bpm avec grelots
+  jinglelive: {
+    unit: 0.5,
+    bells: true,
+    melody: [
+      ...[['C5', .5], ['E5', .5], ['G5', .5], ['C6', .5], ['G5', .5], ['E5', .5], ['G5', .5], ['C6', .5]],
+      ...[['A4', .5], ['C5', .5], ['F5', .5], ['A5', .5], ['F5', .5], ['C5', .5], ['F5', .5], ['A5', .5]],
+      ...[['C5', .5], ['E5', .5], ['G5', .5], ['C6', .5], ['G5', .5], ['E5', .5], ['G5', .5], ['C6', .5]],
+      ...[['B4', .5], ['D5', .5], ['G5', .5], ['B5', .5], ['D6', 1], ['G5', 1]],
+      ...JINGLE_CHORUS,
+      ['-', 4],
+    ],
+    bass: [
+      ['C3', 4], ['F3', 4], ['C3', 4], ['G3', 4],
+      ...JINGLE_CHORDS.flatMap((c) => ({ C: [['C3', 1], ['G3', 1], ['E3', 1], ['G3', 1]], F: [['F3', 1], ['C4', 1], ['A3', 1], ['C4', 1]], G: [['G3', 1], ['D4', 1], ['B3', 1], ['D4', 1]] }[c])),
+      ['C3', 4],
+    ],
+  },
   deckhalls: {
     unit: 0.32,
     melody: (() => {
@@ -105,7 +137,7 @@ const TRACKS = {
 const VOLUME = 0.16;
 
 export function createMusic({ url, track } = {}) {
-  const T = TRACKS[track] || TRACKS.deckhalls;
+  const T = TRACKS[track] || TRACKS.jinglelive;
   let ctx = null, master = null, playing = false, timer = null, audioEl = null;
 
   function chime(f, t, dur, vol) {
@@ -133,8 +165,32 @@ export function createMusic({ url, track } = {}) {
     return t;
   }
 
+  // Grelots : petit bruit aigu très court, sur chaque temps (plus fort sur les temps forts)
+  let noise = null;
+  function bell(t, vol) {
+    if (!noise) {
+      noise = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate);
+      const d = noise.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    const src = ctx.createBufferSource(); src.buffer = noise;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6500;
+    const bp = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = 9000; bp.gain.value = 8;
+    const g = ctx.createGain(); g.gain.value = vol;
+    src.connect(hp).connect(bp).connect(g).connect(master);
+    src.start(t);
+  }
+
   function scheduleLoop(start) {
-    return Math.max(playLine(T.melody, start, 0.5), playLine(T.bass, start, 0.25));
+    const end = Math.max(playLine(T.melody, start, 0.5), playLine(T.bass, start, 0.22));
+    if (T.bells) {
+      // les grelots commencent avec le refrain (après l'intro de 16 temps)
+      const introBeats = 16;
+      for (let b = introBeats; b * T.unit < end - start - 2 * T.unit; b += 0.5) {
+        bell(start + b * T.unit, b % 1 === 0 ? (b % 2 === 0 ? 0.55 : 0.4) : 0.22);
+      }
+    }
+    return end;
   }
 
   function startSynth() {

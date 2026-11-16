@@ -83,9 +83,26 @@
         </div>
         <p class="hint" id="p-summary"></p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Jour</th><th>Pseudo TikTok</th><th class="num">Cœurs du jour</th><th>Top Fan</th><th class="num">Tickets</th><th>Code ticket</th><th>Statut</th><th>Date</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Jour</th><th>Pseudo TikTok</th><th class="num">Cœur du jour</th><th>Super Fan</th><th class="num">Pièces</th><th class="num">Mérite</th><th class="num">Tickets</th><th>Code ticket</th><th>Statut</th><th>Date</th><th>Actions</th></tr></thead>
           <tbody id="p-rows"></tbody>
         </table></div>
+      </div>
+      <div class="winner-overlay" id="edit-box" hidden>
+        <form class="panel edit-card" id="edit-form">
+          <h3 id="edit-title">Modifier la participation</h3>
+          <div class="form-grid">
+            <label>Niveau du Cœur du jour <input name="hearts" type="number" min="0"></label>
+            <label>Pièces envoyées <input name="coins" type="number" min="0"></label>
+            <label class="check full"><input type="checkbox" name="top_fan"> Super Fan</label>
+            <label class="full">🏆 Tickets mérite <span class="hint">Tickets en plus pour l’implication : likes, présence, participation… (peut être négatif pour retirer des tickets)</span>
+              <input name="bonus" type="number"></label>
+          </div>
+          <p class="edit-total" id="edit-total"></p>
+          <div class="actions">
+            <button class="btn-primary" type="submit">Enregistrer</button>
+            <button class="btn" type="button" id="edit-cancel">Annuler</button>
+          </div>
+        </form>
       </div>
     </section>
 
@@ -177,6 +194,7 @@
           <label class="check full"><input type="checkbox" name="music_enabled"> Jouer une musique de Noël sur le calendrier</label>
           <label class="full">Musique
             <select name="music_track">
+              <option value="jinglelive">Jingle Bells (comme la vidéo)</option>
               <option value="deckhalls">Deck the Halls</option>
               <option value="wewish">We Wish You a Merry Christmas</option>
               <option value="jingle">Jingle Bells</option>
@@ -197,10 +215,18 @@
         <h3 class="mt">Participations & tickets</h3>
         <div class="form-grid">
           <label class="check full"><input type="checkbox" name="participation_open"> Les viewers peuvent activer leur récompense</label>
-          <label>Tickets par participation <input name="tickets_base" type="number" min="1" max="100"></label>
-          <label>Tickets bonus si Top Fan <input name="tickets_topfan_bonus" type="number" min="0" max="100"></label>
-          <label>+1 ticket tous les … cœurs <span class="hint">0 = désactivé</span><input name="tickets_hearts_step" type="number" min="0"></label>
-          <label>Maximum de tickets par personne <input name="tickets_max" type="number" min="1" max="1000"></label>
+          <p class="hint full">❤️ <b>Cœur du jour</b> : tickets = niveau × multiplicateur du palier. Exemple avec les réglages par défaut : niveau 5 = 5 tickets, niveau 12 = 24 tickets, niveau 30 = 90 tickets.</p>
+          <label>Palier 1 : jusqu’au niveau <input name="heart_t1_max" type="number" min="1"></label>
+          <label>Palier 1 : tickets par niveau <input name="heart_t1_mult" type="number" min="0"></label>
+          <label>Palier 2 : jusqu’au niveau <input name="heart_t2_max" type="number" min="1"></label>
+          <label>Palier 2 : tickets par niveau <input name="heart_t2_mult" type="number" min="0"></label>
+          <label>Palier 3 : jusqu’au niveau (niveau max) <input name="heart_t3_max" type="number" min="1"></label>
+          <label>Palier 3 : tickets par niveau <input name="heart_t3_mult" type="number" min="0"></label>
+          <label>⭐ Tickets offerts aux Super Fans <input name="superfan_bonus" type="number" min="0"></label>
+          <label>🪙 1 ticket tous les … pièces <span class="hint">0 = désactivé</span><input name="coins_per_ticket" type="number" min="0"></label>
+          <label class="full">Texte d’introduction des règles (affiché sur le calendrier)
+            <textarea name="rules_intro" maxlength="1000"></textarea></label>
+          <p class="hint full">🏆 Les tickets <b>mérite</b> s’ajoutent à la main pour chaque participant, dans « Participants & tickets » → ✏️ Modifier.</p>
         </div>
         <div class="actions"><button class="btn-primary" type="submit">Enregistrer</button><span class="saved" id="settings-saved" hidden>Enregistré ✓</span></div>
       </form>

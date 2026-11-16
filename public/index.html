@@ -6,11 +6,13 @@
   <title>Calendrier de Noël</title>
   <meta name="description" content="Calendrier de l'Avent : une surprise par jour du 1er au 24 décembre.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
   <canvas id="snow" aria-hidden="true"></canvas>
+  <div class="twinkles" id="twinkles" aria-hidden="true"></div>
   <div class="glow glow-a" aria-hidden="true"></div>
   <div class="glow glow-b" aria-hidden="true"></div>
 
@@ -23,12 +25,47 @@
     <p class="eyebrow" id="year">Calendrier de l'Avent</p>
     <h1 id="app-name">Calendrier de Noël</h1>
     <p class="subtitle" id="subtitle"></p>
+    <p class="headline"><span class="hl-gold">24 jours</span><span class="hl-white">24 cadeaux</span></p>
+    <p class="live-pill"><span class="dot"></span>À gagner en live</p>
     <p class="status" id="status" role="status"></p>
   </header>
 
   <main>
     <div class="grid" id="grid" aria-label="Cases du calendrier"></div>
   </main>
+
+  <section class="rules" id="rules" aria-labelledby="rules-title">
+    <p class="rules-eyebrow">Calendrier de l’Avent</p>
+    <h2 id="rules-title">Comment gagner des tickets ?</h2>
+    <p class="rules-intro" id="rules-intro"></p>
+    <div class="rules-grid">
+      <article class="rule">
+        <div class="rule-icon">❤️</div>
+        <h3>Cœur du jour <span class="req">obligatoire</span></h3>
+        <ul id="rules-hearts"></ul>
+      </article>
+      <article class="rule">
+        <div class="rule-icon">⭐</div>
+        <h3>Super Fan</h3>
+        <p class="big-num" id="rules-fan"></p>
+        <p>offerts directement !</p>
+      </article>
+      <article class="rule">
+        <div class="rule-icon">🪙</div>
+        <h3>Cadeaux</h3>
+        <p id="rules-coins"></p>
+      </article>
+      <article class="rule">
+        <div class="rule-icon">🏆</div>
+        <h3>Mérite</h3>
+        <p>Des tickets en plus pourront être donnés selon ton implication : likes, présence sur les lives, participation et bien d’autres critères !</p>
+      </article>
+    </div>
+    <div class="cheat-warning">
+      <strong>⚠️ Interdiction de tricher</strong>
+      <p>Toutes les informations sont vérifiées pendant le live. Une fausse déclaration (niveau du Cœur du jour, Super Fan, pièces envoyées) entraîne le refus de la participation, l’exclusion du calendrier et des <b>sanctions sévères</b>. Certaines conditions sont à respecter pour participer.</p>
+    </div>
+  </section>
 
   <footer class="foot" id="footer"></footer>
 
@@ -48,7 +85,7 @@
       <p class="modal-note" id="pl-summary"></p>
       <div class="plist-wrap">
         <table class="plist">
-          <thead><tr><th>Pseudo TikTok</th><th>Cœurs</th><th>Top Fan</th><th>Tickets</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Pseudo TikTok</th><th>Cœur</th><th>Super Fan</th><th>Pièces</th><th>Tickets</th><th>Statut</th></tr></thead>
           <tbody id="pl-rows"></tbody>
         </table>
       </div>
@@ -74,18 +111,19 @@
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="m-title">
       <button class="modal-close" data-close aria-label="Fermer">×</button>
-      <div class="modal-gift" aria-hidden="true">
-        <div class="gift-lid"></div>
-        <div class="gift-box"></div>
+      <!-- Carte du lot, dans le style de la vidéo -->
+      <div class="prize" id="prize">
+        <div class="prize-rays" aria-hidden="true"></div>
+        <p class="prize-last" id="p-last" hidden>Les 3 dernières cases</p>
+        <p class="prize-label">Jour</p>
+        <p class="prize-day" id="m-day"></p>
+        <div class="prize-divider" aria-hidden="true"><span></span></div>
+        <img class="prize-img" id="m-image" alt="" hidden>
+        <h2 class="prize-name" id="m-reward"></h2>
+        <p class="prize-pill" id="p-pill" hidden></p>
       </div>
-      <p class="modal-day" id="m-day"></p>
-      <h2 id="m-title"></h2>
-      <img id="m-image" alt="" hidden>
+      <h3 class="modal-title" id="m-title"></h3>
       <p class="modal-message" id="m-message"></p>
-      <div class="modal-reward" id="m-reward-wrap" hidden>
-        <span>🎁 Lot du jour</span>
-        <strong id="m-reward"></strong>
-      </div>
 
       <button class="btn" id="m-activate" type="button" hidden>Activer ma récompense</button>
       <p class="modal-note" id="m-closed" hidden>Les participations sont fermées pour le moment.</p>
@@ -95,14 +133,23 @@
         <label>Ton pseudo TikTok
           <span class="at-field"><span>@</span><input id="f-pseudo" name="pseudo" required maxlength="24" autocomplete="nickname" placeholder="tonpseudo"></span>
         </label>
-        <label>Ton nombre de cœurs du jour
-          <input id="f-hearts" name="hearts" type="number" inputmode="numeric" min="0" max="1000000" step="1" required placeholder="ex : 25">
+        <div class="cheat-warning small">
+          <strong>⚠️ Ne triche pas !</strong>
+          <p>Tout est vérifié pendant le live. Une fausse info = participation refusée, exclusion et sanctions sévères.</p>
+        </div>
+        <label>Niveau de ton Cœur du jour <span class="req">obligatoire</span>
+          <input id="f-hearts" name="hearts" type="number" inputmode="numeric" min="1" max="50" step="1" required placeholder="de 1 à 50">
         </label>
         <fieldset>
-          <legend>Es-tu Top Fan ?</legend>
+          <legend>Es-tu Super Fan ?</legend>
           <label class="radio"><input type="radio" name="topfan" value="oui"> Oui</label>
           <label class="radio"><input type="radio" name="topfan" value="non" checked> Non</label>
         </fieldset>
+        <label>Pièces envoyées en cadeaux pendant le live
+          <input id="f-coins" name="coins" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+        </label>
+        <p class="estimate" id="f-estimate"></p>
+        <label class="certify"><input type="checkbox" id="f-certify"> Je certifie que mes informations sont exactes. Je sais que toute triche sera sanctionnée.</label>
         <p class="form-error" id="f-error" role="alert" hidden></p>
         <button class="btn" type="submit" id="f-submit">Valider ma participation</button>
         <p class="modal-note">Une seule participation par jour. Les informations sont vérifiées pendant le live.</p>

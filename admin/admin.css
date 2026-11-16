@@ -119,6 +119,11 @@ tr.today td { background: rgba(230, 192, 104, .07); }
 }
 .mt { margin-top: 24px; }
 
+.edit-card { width: min(560px, 100%); margin: 0; }
+.edit-total { margin: 16px 0 0; font-size: 18px; font-weight: 700; color: var(--or); }
+.btn-edit { border: 1px solid var(--line); background: rgba(230, 192, 104, .1); color: var(--or); border-radius: 10px; padding: 6px 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.hint.full { grid-column: 1 / -1; margin: 0; }
+
 /* ----- Retour au calendrier ----- */
 .back-home { display: block; margin: 0 4px 16px; padding: 11px 14px; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 700;
   color: #2a1c05; background: linear-gradient(180deg, #fff0bf, var(--or) 50%, var(--or-2)); box-shadow: 0 6px 16px rgba(230, 192, 104, .25); }

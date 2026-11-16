@@ -106,17 +106,20 @@ function renderParticipants() {
   const rows = participations.filter((p) => !q || p.pseudo.toLowerCase().includes(q));
   const tickets = rows.reduce((a, p) => a + p.tickets, 0);
   const cnt = (st) => rows.filter((p) => p.status === st).length;
-  $('p-summary').textContent = `${nf(rows.length)} participation${rows.length > 1 ? 's' : ''} · ${nf(tickets)} ticket${tickets > 1 ? 's' : ''} · ${nf(rows.filter((p) => p.top_fan).length)} Top Fan · ⏳ ${cnt('attente')} à valider · ✅ ${cnt('validee')} validée(s) · ❌ ${cnt('refusee')} refusée(s)`;
+  $('p-summary').textContent = `${nf(rows.length)} participation${rows.length > 1 ? 's' : ''} · ${nf(tickets)} ticket${tickets > 1 ? 's' : ''} · ${nf(rows.filter((p) => p.top_fan).length)} Super Fan · ⏳ ${cnt('attente')} à valider · ✅ ${cnt('validee')} validée(s) · ❌ ${cnt('refusee')} refusée(s)`;
   $('p-rows').replaceChildren(...(rows.length ? rows.map((p) => el('tr', {},
     el('td', { text: `${p.day} déc.` }),
     el('td', {}, el('a', { href: `https://www.tiktok.com/@${encodeURIComponent(p.pseudo)}`, target: '_blank', rel: 'noopener noreferrer', text: `@${p.pseudo}` })),
-    el('td', { class: 'num', text: nf(p.hearts) }),
+    el('td', { class: 'num', text: `Niv. ${p.hearts}` }),
     el('td', {}, el('span', { class: `pill ${p.top_fan ? 'oui' : 'non'}`, text: p.top_fan ? 'Oui' : 'Non' })),
+    el('td', { class: 'num', text: nf(p.coins) }),
+    el('td', { class: 'num', text: p.bonus ? (p.bonus > 0 ? `+${p.bonus}` : String(p.bonus)) : '—' }),
     el('td', { class: 'num', text: p.tickets }),
     el('td', { class: 'code', text: p.ticket_code }),
     el('td', {}, el('span', { class: `status ${p.status}`, text: STATUS_LABELS[p.status] || p.status })),
     el('td', { text: fmtDate(p.created_at) }),
     el('td', {}, el('div', { class: 'row-actions' },
+      el('button', { class: 'btn-edit', text: '✏️ Modifier', onclick: () => openEdit(p) }),
       p.status !== 'validee' ? el('button', { class: 'btn-ok', text: 'Valider', onclick: () => setStatus(p, 'validee') }) : null,
       p.status !== 'refusee' ? el('button', { class: 'btn-no', text: 'Refuser', onclick: () => setStatus(p, 'refusee') }) : null,
       p.status !== 'attente' ? el('button', { class: 'btn-ghost', text: '↺ En attente', title: 'Remettre en attente', onclick: () => setStatus(p, 'attente') }) : null,
@@ -125,8 +128,54 @@ function renderParticipants() {
         try { await api(`/api/admin/participations/${p.id}`, { method: 'DELETE' }); toast('Participation supprimée'); loaders.participants(); }
         catch (e) { toast(e.message, true); }
       } })))))
-    : [el('tr', {}, el('td', { colspan: 9, class: 'empty', text: 'Aucune participation pour le moment.' }))]));
+    : [el('tr', {}, el('td', { colspan: 11, class: 'empty', text: 'Aucune participation pour le moment.' }))]));
 }
+// ----- Modifier une participation (niveau, Super Fan, pièces, tickets mérite) -----
+let editing = null, rulesCache = null;
+async function getRules() {
+  if (!rulesCache) {
+    const { settings: st } = await api('/api/admin/settings');
+    const n = (k, d) => (Number.isFinite(Number(st[k])) && st[k] !== '' ? Number(st[k]) : d);
+    rulesCache = { tiers: [[n('heart_t1_max', 9), n('heart_t1_mult', 1)], [n('heart_t2_max', 19), n('heart_t2_mult', 2)], [n('heart_t3_max', 50), n('heart_t3_mult', 3)]],
+      superfan: n('superfan_bonus', 20), coinsPer: n('coins_per_ticket', 200) };
+  }
+  return rulesCache;
+}
+function calcTickets(r, level, fan, coins, bonus) {
+  const tier = r.tiers.find(([max]) => level <= max) || r.tiers[r.tiers.length - 1];
+  return Math.max(1, level * tier[1] + (fan ? r.superfan : 0) + (r.coinsPer > 0 ? Math.floor(coins / r.coinsPer) : 0) + bonus);
+}
+async function openEdit(p) {
+  editing = p;
+  const f = $('edit-form');
+  f.elements.hearts.value = p.hearts; f.elements.coins.value = p.coins || 0;
+  f.elements.top_fan.checked = Boolean(p.top_fan); f.elements.bonus.value = p.bonus || 0;
+  $('edit-title').textContent = `Modifier @${p.pseudo} (jour ${p.day})`;
+  $('edit-box').hidden = false;
+  await refreshEditTotal();
+}
+async function refreshEditTotal() {
+  const f = $('edit-form'), r = await getRules();
+  const t = calcTickets(r, Number(f.elements.hearts.value) || 0, f.elements.top_fan.checked, Number(f.elements.coins.value) || 0, Number(f.elements.bonus.value) || 0);
+  $('edit-total').textContent = `🎟️ Total : ${t} ticket${t > 1 ? 's' : ''}`;
+}
+$('edit-form').addEventListener('input', refreshEditTotal);
+$('edit-cancel').addEventListener('click', () => { $('edit-box').hidden = true; });
+$('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    const r = await api(`/api/admin/participations/${editing.id}`, { method: 'PUT', body: {
+      hearts: Number(f.elements.hearts.value) || 0, coins: Number(f.elements.coins.value) || 0,
+      top_fan: f.elements.top_fan.checked, bonus: Number(f.elements.bonus.value) || 0,
+    } });
+    Object.assign(editing, r.participation);
+    $('edit-box').hidden = true;
+    renderParticipants();
+    toast('Participation mise à jour');
+  } catch (err) { toast(err.message, true); }
+});
+
 const STATUS_LABELS = { attente: '⏳ À valider', validee: '✅ Validée', refusee: '❌ Refusée' };
 async function setStatus(p, status) {
   try {
@@ -418,11 +467,14 @@ function caseEditor(c, icons) {
 
   const form = el('form', {},
     el('div', { class: 'form-grid' },
-      field('Lot / récompense', inp('reward', c.reward, { maxlength: 300 }), false),
+      field('Lot / récompense (gros titre)', inp('reward', c.reward, { maxlength: 300 }), false),
+      field('Pastille sous le lot', inp('subtitle', c.subtitle, { maxlength: 80, placeholder: 'Une heure rien que pour toi' }), false),
+      field('Couleur de la pastille', el('select', { name: 'accent' }, ...[['rouge', 'Rouge'], ['vert', 'Vert'], ['violet', 'Violet'], ['noir', 'Noir'], ['bleu', 'Bleu'], ['or', 'Doré']]
+        .map(([v, t]) => el('option', { value: v, text: t, selected: v === (c.accent || 'or') }))), false),
       field('Décoration de la case', iconSel, false),
       field('Titre affiché', inp('title', c.title, { maxlength: 120 })),
       field('Message', msg),
-      field('Image (lien https, optionnel)', inp('image_url', c.image_url, { type: 'url', placeholder: 'https://…' })),
+      field('Photo du lot (optionnel)', inp('image_url', c.image_url, { placeholder: 'https://… ou /img/…' }), true, 'Photos fournies : /img/passe-de-combat.webp, /img/figurine-pop.webp, /img/peluche-tiktok.webp'),
       field('Lien (optionnel)', inp('link_url', c.link_url, { type: 'url', placeholder: 'https://www.tiktok.com/@…' }), false),
       field('Texte du bouton du lien', inp('link_label', c.link_label, { maxlength: 60, placeholder: 'Rejoindre le live' }), false)),
     el('div', { class: 'actions' }, el('button', { class: 'btn-primary', type: 'submit', text: 'Enregistrer la case' }), saved));
@@ -462,6 +514,7 @@ $('settings-form').addEventListener('submit', async (e) => {
   body.music_enabled = f.elements.music_enabled.checked;
   try {
     await api('/api/admin/settings', { method: 'PUT', body });
+    rulesCache = null;
     $('settings-saved').hidden = false; setTimeout(() => { $('settings-saved').hidden = true; }, 2000);
   } catch (err) { toast(err.message, true); }
 });

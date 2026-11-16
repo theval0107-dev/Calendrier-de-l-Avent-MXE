@@ -22,13 +22,15 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 - **Réglages** : nom du calendrier, textes, année, musique (tu peux mettre ton propre MP3), date de test, ouverture et fermeture des participations, règles des tickets.
 - **Compte** : changer l'e-mail et le mot de passe.
 
-## Règles des tickets (dans Réglages)
-- Tickets par participation (par défaut : 1)
-- Tickets bonus si Top Fan (par défaut : 0)
-- +1 ticket tous les X cœurs du jour (par défaut : désactivé)
-- Maximum de tickets par personne (par défaut : 10)
+## Règles des tickets (modifiables dans Réglages)
+- ❤️ **Cœur du jour** (obligatoire) : niveau × tickets du palier. Niveau 1 à 9 = 1 ticket par niveau, 10 à 19 = 2 tickets par niveau, 20 à 50 = 3 tickets par niveau (ex. niveau 12 = 24 tickets).
+- ⭐ **Super Fan** : +20 tickets.
+- 🪙 **Cadeaux** : 1 ticket par tranche de 200 pièces envoyées.
+- 🏆 **Mérite** : tickets ajoutés à la main par l'admin (Participants & tickets → ✏️ Modifier).
 
-> Le nombre de cœurs et le statut Top Fan sont déclarés par le viewer. Vérifie-les sur TikTok avant de remettre un lot.
+Avant de valider, le viewer doit certifier que ses informations sont exactes. Un avertissement anti-triche est affiché.
+
+> Le niveau du Cœur du jour, le statut Super Fan et les pièces sont déclarés par le viewer. Vérifie-les sur TikTok avant de remettre un lot.
 
 ## Hébergement gratuit : Cloudflare Workers + D1
 Le site tourne sur l'offre **gratuite** de Cloudflare (pas de carte bancaire). La base de données (D1) est créée automatiquement au premier déploiement.
@@ -53,6 +55,11 @@ npm run dev
 Après avoir modifié un fichier du dossier `admin/`, lance `npm run build-admin`.
 
 **Tester avant décembre** : Admin → Réglages → « Date de test » (ex. 2026-12-07). Pense à la vider ensuite, car les viewers voient aussi cette date.
+
+## Style et musique
+- Polices libres incluses dans `public/fonts/` : Anton, Playfair Display et Poppins (licence SIL OFL).
+- Photos des 3 derniers lots dans `public/img/`, tirées de la vidéo de présentation.
+- Musique par défaut : « Jingle Bells » à 120 bpm avec grelots, comme dans la vidéo. D'autres choix sont disponibles dans les Réglages.
 
 ## Sécurité
 - Mots de passe chiffrés (PBKDF2-SHA256). Les sessions sont stockées en base dans des cookies `HttpOnly`, `Secure` et `SameSite=Strict`. Elles expirent après 12 h.

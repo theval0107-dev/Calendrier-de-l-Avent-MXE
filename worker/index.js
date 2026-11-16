@@ -21,22 +21,25 @@ const DEFAULT_SETTINGS = {
   test_date: '',
   footer_text: 'Reviens chaque jour pour découvrir la surprise du jour 🎄',
   participation_open: '1',
-  tickets_base: '1',
-  tickets_topfan_bonus: '0',
-  tickets_hearts_step: '0',
-  tickets_max: '10',
+  // Règles des tickets
+  heart_t1_max: '9', heart_t1_mult: '1',
+  heart_t2_max: '19', heart_t2_mult: '2',
+  heart_t3_max: '50', heart_t3_mult: '3',
+  superfan_bonus: '20',
+  coins_per_ticket: '200',
+  rules_intro: 'Pour vous remercier de votre présence, de votre soutien et de votre fidélité sur les lives, j’ai décidé de mettre en place un calendrier de l’Avent avec des récompenses à gagner tout au long du mois de décembre !',
   music_enabled: '1',
   music_url: '',
-  music_track: 'deckhalls',
+  music_track: 'jinglelive',
   creator_name: 'MXOU',
 };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS cases (day INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', reward TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', link_url TEXT NOT NULL DEFAULT '', link_label TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS cases (day INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', reward TEXT NOT NULL DEFAULT '', subtitle TEXT NOT NULL DEFAULT '', accent TEXT NOT NULL DEFAULT 'or', image_url TEXT NOT NULL DEFAULT '', link_url TEXT NOT NULL DEFAULT '', link_label TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE COLLATE NOCASE, pass_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, admin_id INTEGER NOT NULL, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS participations (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, pseudo TEXT NOT NULL, hearts INTEGER NOT NULL DEFAULT 0, top_fan INTEGER NOT NULL DEFAULT 0, tickets INTEGER NOT NULL DEFAULT 1, ticket_code TEXT NOT NULL UNIQUE, visitor_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'attente', created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS participations (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, pseudo TEXT NOT NULL, hearts INTEGER NOT NULL DEFAULT 0, top_fan INTEGER NOT NULL DEFAULT 0, tickets INTEGER NOT NULL DEFAULT 1, ticket_code TEXT NOT NULL UNIQUE, visitor_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'attente', coins INTEGER NOT NULL DEFAULT 0, bonus INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_pseudo ON participations(day, pseudo COLLATE NOCASE);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_visitor ON participations(day, visitor_id);
 CREATE TABLE IF NOT EXISTS visits (date TEXT NOT NULL, visitor_id TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, visitor_id));
@@ -48,7 +51,23 @@ CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL,
 const SESSION_MS = 12 * 3600 * 1000;
 const PBKDF2_ITER = 20000;
 const STATUSES = ['attente', 'validee', 'refusee'];
-const MUSIC_TRACKS = ['deckhalls', 'wewish', 'jingle', 'doucenuit'];
+const MUSIC_TRACKS = ['jinglelive', 'deckhalls', 'wewish', 'jingle', 'doucenuit'];
+const ACCENTS = ['rouge', 'vert', 'violet', 'noir', 'bleu', 'or'];
+// Présentation des lots comme dans la vidéo : sous-titre (pastille), couleur, photo
+const REWARD_STYLE = {
+  '1h avec moi': ['Une heure rien que pour toi', 'rouge'],
+  'émoticônes': ['Des émoticônes rien que pour toi', 'or'],
+  'skin 800': ['Un skin à 800', 'vert'],
+  'danse ftn': ['Une danse Fortnite', 'bleu'],
+  'vip': ['Statut VIP', 'noir'],
+  'vidéo ia': ['Ta vidéo IA perso', 'violet'],
+  'vidéo ia x1': ['Ta vidéo IA perso', 'violet'],
+};
+const SPECIAL_DAYS = {
+  22: { reward: 'Passe de combat', subtitle: 'Prochaine saison', image: '/img/passe-de-combat.webp', old: 'Passe de combat prochaine saison' },
+  23: { reward: 'Figurine Pop', subtitle: 'One Piece', image: '/img/figurine-pop.webp', old: 'Figurine Pop One Piece' },
+  24: { reward: 'Peluche TikTok', subtitle: 'La dernière case', image: '/img/peluche-tiktok.webp', old: 'Peluche TikTok' },
+};
 
 // =====================================================================
 //  Utilitaires
@@ -150,13 +169,28 @@ async function init(env) {
     'ALTER TABLE draws ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE draws ADD COLUMN seen INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE draws ADD COLUMN manual INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE participations ADD COLUMN coins INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE participations ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE cases ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE cases ADD COLUMN accent TEXT NOT NULL DEFAULT 'or'",
   ]) { try { await db.prepare(sql).run(); } catch { /* colonne déjà présente */ } }
-  // Passage à « Deck the Halls » comme musique (une seule fois, ensuite le choix des Réglages est respecté)
-  if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_music_v2'").first())) {
-    await db.batch([
-      db.prepare("UPDATE settings SET value = 'deckhalls' WHERE key = 'music_track'"),
-      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_music_v2', '1')"),
-    ]);
+  // Mise à jour v4 (une seule fois) : musique de la vidéo + présentation des lots comme dans la vidéo
+  if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_v4'").first())) {
+    const upd = [
+      db.prepare("UPDATE settings SET value = 'jinglelive' WHERE key = 'music_track'"),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_v4', '1')"),
+    ];
+    const { results: cs } = await db.prepare('SELECT day, reward, subtitle, image_url FROM cases').all();
+    for (const c of cs) {
+      const sp = SPECIAL_DAYS[c.day];
+      if (sp && c.reward === sp.old) {
+        upd.push(db.prepare("UPDATE cases SET reward = ?, subtitle = ?, accent = 'or', image_url = CASE WHEN image_url = '' THEN ? ELSE image_url END WHERE day = ?").bind(sp.reward, sp.subtitle, sp.image, c.day));
+      } else if (!c.subtitle) {
+        const st = REWARD_STYLE[String(c.reward).trim().toLowerCase()];
+        if (st) upd.push(db.prepare('UPDATE cases SET subtitle = ?, accent = ? WHERE day = ?').bind(st[0], st[1], c.day));
+      }
+    }
+    await db.batch(upd);
   }
 
   // Code administrateur : vient du secret Cloudflare ADMIN_CODE (ou ADMIN_PASSWORD).
@@ -243,12 +277,28 @@ function ticketCode(day) {
   for (const b of crypto.getRandomValues(new Uint8Array(5))) r += CODE_CHARS[b % CODE_CHARS.length];
   return `J${String(day).padStart(2, '0')}-${r}`;
 }
-function computeTickets(s, hearts, topFan) {
-  const base = Number(s.tickets_base) || 1;
-  const bonus = topFan ? Number(s.tickets_topfan_bonus) || 0 : 0;
-  const step = Number(s.tickets_hearts_step) || 0;
-  const max = Math.max(1, Number(s.tickets_max) || 10);
-  return Math.min(max, Math.max(1, base + bonus + (step > 0 ? Math.floor(hearts / step) : 0)));
+// Règles : Cœur du jour par paliers (niveau × multiplicateur du palier), Super Fan, pièces, mérite
+function ticketRules(s) {
+  const n = (k, d) => { const v = Number(s[k]); return Number.isFinite(v) && v >= 0 ? v : d; };
+  return {
+    tiers: [[n('heart_t1_max', 9), n('heart_t1_mult', 1)], [n('heart_t2_max', 19), n('heart_t2_mult', 2)], [n('heart_t3_max', 50), n('heart_t3_mult', 3)]],
+    superfan: n('superfan_bonus', 20),
+    coinsPer: n('coins_per_ticket', 200),
+  };
+}
+function computeTickets(s, level, superFan, coins, bonus = 0) {
+  const r = ticketRules(s);
+  const tier = r.tiers.find(([max]) => level <= max) || r.tiers[r.tiers.length - 1];
+  const fromHearts = level * tier[1];
+  const fromFan = superFan ? r.superfan : 0;
+  const fromCoins = r.coinsPer > 0 ? Math.floor(coins / r.coinsPer) : 0;
+  return Math.max(1, fromHearts + fromFan + fromCoins + bonus);
+}
+function maxHeartLevel(s) { return ticketRules(s).tiers[2][0] || 50; }
+function cleanImage(v) {
+  const t = clean(v, 500);
+  if (/^\/img\/[a-z0-9._-]+$/i.test(t)) return t;   // photo fournie avec le site
+  return cleanUrl(t);
 }
 function randomInt(max) {
   // entier aléatoire uniforme dans [0, max)
@@ -300,8 +350,9 @@ async function handleApi(req, env, url, res) {
     const countMap = isAdmin ? Object.fromEntries(counts.results.map((r) => [r.day, r.n])) : null;
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
-      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'deckhalls',
+      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'jinglelive',
       admin: isAdmin, creatorName: s.creator_name || 'MXOU', wins: wins.results,
+      rules: { ...ticketRules(s), intro: s.rules_intro || '' },
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
         day: c.day, icon: c.icon, ...(isAdmin ? { participants: countMap[c.day] || 0 } : {}),
@@ -326,7 +377,7 @@ async function handleApi(req, env, url, res) {
     const vid = visitorId(req, res);
     const isToday = t.day === day;
     const queries = [
-      db.prepare('SELECT day, title, message, reward, image_url, link_url, link_label FROM cases WHERE day = ?').bind(day),
+      db.prepare('SELECT day, title, message, reward, subtitle, accent, image_url, link_url, link_label FROM cases WHERE day = ?').bind(day),
       db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid),
     ];
     // Les ouvertures faites par l'administrateur ne sont pas comptées dans les statistiques
@@ -364,8 +415,12 @@ async function handleApi(req, env, url, res) {
     const pseudo = clean(b.pseudo, 40).replace(/^@+/, '');
     if (!/^[A-Za-z0-9._]{2,24}$/.test(pseudo)) return res.error('Pseudo TikTok invalide (lettres, chiffres, points et _ uniquement, 2 à 24 caractères).', 400);
     const hearts = Number(b.hearts);
-    if (!Number.isInteger(hearts) || hearts < 0 || hearts > 1000000) return res.error('Nombre de cœurs invalide.', 400);
+    const maxLvl = maxHeartLevel(s);
+    if (!Number.isInteger(hearts) || hearts < 1 || hearts > maxLvl) return res.error(`Indique le niveau de ton Cœur du jour (obligatoire, de 1 à ${maxLvl}).`, 400);
     const topFan = b.top_fan === true;
+    const coins = b.coins === '' || b.coins == null ? 0 : Number(b.coins);
+    if (!Number.isInteger(coins) || coins < 0 || coins > 10000000) return res.error('Nombre de pièces invalide.', 400);
+    if (b.certify !== true) return res.error('Tu dois certifier que tes informations sont exactes.', 400);
 
     // Pour l'admin, chaque ticket a son propre identifiant (il peut en créer plusieurs)
     const vid = isAdmin ? `admin-${randomToken(12)}` : visitorId(req, res);
@@ -374,12 +429,12 @@ async function handleApi(req, env, url, res) {
     if (await db.prepare('SELECT 1 AS x FROM participations WHERE day = ? AND pseudo = ? COLLATE NOCASE').bind(day, pseudo).first()) {
       return res.error(isAdmin ? 'Ce pseudo a déjà un ticket pour cette case.' : 'Ce pseudo a déjà participé aujourd’hui.', 409);
     }
-    const tickets = computeTickets(s, hearts, topFan);
+    const tickets = computeTickets(s, hearts, topFan, coins);
     for (let i = 0; i < 5; i++) {
       const code = ticketCode(day);
       try {
-        await db.prepare('INSERT INTO participations (day, pseudo, hearts, top_fan, tickets, ticket_code, visitor_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .bind(day, pseudo, hearts, topFan ? 1 : 0, tickets, code, vid).run();
+        await db.prepare('INSERT INTO participations (day, pseudo, hearts, top_fan, coins, tickets, ticket_code, visitor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(day, pseudo, hearts, topFan ? 1 : 0, coins, tickets, code, vid).run();
         return res.json({ ok: true, my_participation: { pseudo, tickets, ticket_code: code, status: 'attente' } });
       } catch (e) {
         if (!String(e.message).includes('ticket_code')) return res.error('Participation déjà enregistrée pour aujourd’hui.', 409);
@@ -442,12 +497,13 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const day = Number(mm[1]);
     if (day < 1 || day > 24) return res.error('Case invalide', 400);
     const b = await readJson(req);
-    const image_url = cleanUrl(b.image_url), link_url = cleanUrl(b.link_url);
+    const image_url = cleanImage(b.image_url), link_url = cleanUrl(b.link_url);
     if (image_url === null) return res.error('Lien d’image invalide (doit commencer par https://)', 400);
     if (link_url === null) return res.error('Lien invalide (doit commencer par https://)', 400);
     const icon = ICONS.includes(b.icon) ? b.icon : ICONS[0];
-    await db.prepare(`UPDATE cases SET title = ?, message = ?, reward = ?, image_url = ?, link_url = ?, link_label = ?, icon = ?, updated_at = datetime('now') WHERE day = ?`)
-      .bind(clean(b.title, 120), clean(b.message, 3000), clean(b.reward, 300), image_url, link_url, clean(b.link_label, 60), icon, day).run();
+    const accent = ACCENTS.includes(b.accent) ? b.accent : 'or';
+    await db.prepare(`UPDATE cases SET title = ?, message = ?, reward = ?, subtitle = ?, accent = ?, image_url = ?, link_url = ?, link_label = ?, icon = ?, updated_at = datetime('now') WHERE day = ?`)
+      .bind(clean(b.title, 120), clean(b.message, 3000), clean(b.reward, 300), clean(b.subtitle, 80), accent, image_url, link_url, clean(b.link_label, 60), icon, day).run();
     return res.json({ ok: true, case: await db.prepare('SELECT * FROM cases WHERE day = ?').bind(day).first() });
   }
 
@@ -471,10 +527,13 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const values = {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
-      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'deckhalls',
+      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'jinglelive',
       creator_name: clean(b.creator_name, 40) || 'MXOU',
-      tickets_base: int(b.tickets_base, 1, 100, 1), tickets_topfan_bonus: int(b.tickets_topfan_bonus, 0, 100, 0),
-      tickets_hearts_step: int(b.tickets_hearts_step, 0, 1000000, 0), tickets_max: int(b.tickets_max, 1, 1000, 10),
+      heart_t1_max: int(b.heart_t1_max, 1, 1000, 9), heart_t1_mult: int(b.heart_t1_mult, 0, 1000, 1),
+      heart_t2_max: int(b.heart_t2_max, 1, 1000, 19), heart_t2_mult: int(b.heart_t2_mult, 0, 1000, 2),
+      heart_t3_max: int(b.heart_t3_max, 1, 1000, 50), heart_t3_mult: int(b.heart_t3_mult, 0, 1000, 3),
+      superfan_bonus: int(b.superfan_bonus, 0, 100000, 20), coins_per_ticket: int(b.coins_per_ticket, 0, 1000000, 200),
+      rules_intro: clean(b.rules_intro, 1000),
     };
     await db.batch(Object.entries(values).map(([k, v]) =>
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(k, v)));
@@ -518,23 +577,33 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const where = [], args = [];
     if (Number.isInteger(day) && day >= 1 && day <= 24) { where.push('day = ?'); args.push(day); }
     if (STATUSES.includes(status)) { where.push('status = ?'); args.push(status); }
-    const sql = `SELECT id, day, pseudo, hearts, top_fan, tickets, ticket_code, status, created_at FROM participations
+    const sql = `SELECT id, day, pseudo, hearts, top_fan, coins, bonus, tickets, ticket_code, status, created_at FROM participations
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT 5000`;
     return res.json({ participations: (await db.prepare(sql).bind(...args).all()).results });
   }
   if (p === '/api/admin/participations.csv' && m === 'GET') {
-    const { results } = await db.prepare('SELECT day, pseudo, hearts, top_fan, tickets, ticket_code, status, created_at FROM participations ORDER BY day, id').all();
+    const { results } = await db.prepare('SELECT day, pseudo, hearts, top_fan, coins, bonus, tickets, ticket_code, status, created_at FROM participations ORDER BY day, id').all();
     const label = { attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
     const esc = (v) => { let x = String(v ?? ''); if (/^[=+\-@]/.test(x)) x = "'" + x; return `"${x.replace(/"/g, '""')}"`; };
-    const lines = ['Jour;Pseudo TikTok;Coeurs du jour;Top Fan;Tickets;Code ticket;Statut;Date (UTC)']
-      .concat(results.map((r) => [r.day, r.pseudo, r.hearts, r.top_fan ? 'Oui' : 'Non', r.tickets, r.ticket_code, label[r.status] || r.status, r.created_at].map(esc).join(';')));
+    const lines = ['Jour;Pseudo TikTok;Niveau Coeur du jour;Super Fan;Pieces;Tickets merite;Tickets total;Code ticket;Statut;Date (UTC)']
+      .concat(results.map((r) => [r.day, r.pseudo, r.hearts, r.top_fan ? 'Oui' : 'Non', r.coins, r.bonus, r.tickets, r.ticket_code, label[r.status] || r.status, r.created_at].map(esc).join(';')));
     return res.build('﻿' + lines.join('\r\n'), 200, 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="participations.csv"' });
   }
   if ((mm = p.match(/^\/api\/admin\/participations\/(\d+)$/)) && m === 'PUT') {
     const b = await readJson(req);
-    if (!STATUSES.includes(b.status)) return res.error('Statut invalide', 400);
-    await db.prepare('UPDATE participations SET status = ? WHERE id = ?').bind(b.status, Number(mm[1])).run();
-    return res.json({ ok: true });
+    const id = Number(mm[1]);
+    const cur = await db.prepare('SELECT * FROM participations WHERE id = ?').bind(id).first();
+    if (!cur) return res.error('Participation introuvable', 404);
+    if (b.status !== undefined && !STATUSES.includes(b.status)) return res.error('Statut invalide', 400);
+    const s = await getSettings(db);
+    const int = (v, d, min, max) => { if (v === undefined || v === '') return d; const n = Number(v); return Number.isInteger(n) && n >= min && n <= max ? n : null; };
+    const hearts = int(b.hearts, cur.hearts, 0, 1000), coins = int(b.coins, cur.coins, 0, 10000000), bonus = int(b.bonus, cur.bonus, -100000, 100000);
+    if (hearts === null || coins === null || bonus === null) return res.error('Valeur invalide', 400);
+    const topFan = b.top_fan === undefined ? Boolean(cur.top_fan) : b.top_fan === true;
+    const tickets = computeTickets(s, hearts, topFan, coins, bonus);
+    await db.prepare('UPDATE participations SET status = ?, hearts = ?, top_fan = ?, coins = ?, bonus = ?, tickets = ? WHERE id = ?')
+      .bind(b.status ?? cur.status, hearts, topFan ? 1 : 0, coins, bonus, tickets, id).run();
+    return res.json({ ok: true, participation: await db.prepare('SELECT id, day, pseudo, hearts, top_fan, coins, bonus, tickets, ticket_code, status, created_at FROM participations WHERE id = ?').bind(id).first() });
   }
   if (p === '/api/admin/participations/validate-all' && m === 'POST') {
     const b = await readJson(req);
