@@ -38,13 +38,64 @@ function render(data) {
   link.querySelector('span').textContent = adminMode ? 'Ouvrir l’espace administrateur' : 'Se connecter en tant qu’administrateur';
 
   creatorName = data.creatorName || 'MXOU';
+  calData = data;
+  clockOffset = (data.now || Date.now()) - Date.now();
   renderRules(data.rules);
   renderSocials(data.socials);
   const grid = $('grid');
   grid.replaceChildren();
   data.cases.forEach((c, i) => grid.append(buildCase(c, i)));
   if (data.wins && data.wins.length && !winShown) showWin(data.wins);
+  updateCountdown();
 }
+
+// ---------- Comptes à rebours ----------
+let calData = null, clockOffset = 0, reloading = false;
+const pad2 = (n) => String(n).padStart(2, '0');
+function splitTime(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return { d: Math.floor(s / 86400), h: Math.floor(s / 3600) % 24, m: Math.floor(s / 60) % 60, s: s % 60 };
+}
+function todayOpened() {
+  if (!calData || !calData.today) return false;
+  return calData.cases.some((c) => c.day === calData.today && c.opened);
+}
+function updateCountdown() {
+  const box = $('countdown');
+  const nx = calData && calData.next;
+  if (!nx) { box.hidden = true; return; }
+  const left = nx.at - (Date.now() + clockOffset);
+  if (left <= 0) {
+    // C'est l'heure : on recharge le calendrier pour débloquer la nouvelle case
+    if (!reloading) { reloading = true; setTimeout(() => { reloading = false; load(); }, 1500); }
+    return;
+  }
+  const t = splitTime(left);
+  const before = calData.status === 'avant';
+  // Avant le 1er décembre : compte à rebours doré. En décembre : rouge, une fois la case du jour ouverte.
+  const show = before || todayOpened();
+  if (todayOpened()) $('status').textContent = `Tu as ouvert la case ${calData.today} ✓ Reviens demain pour la suivante !`;
+  box.hidden = !show;
+  box.className = `countdown ${before ? 'cd-gold' : 'cd-red'}`;
+  $('cd-title').textContent = before ? '🎄 Ouverture du calendrier dans' : `⏳ Prochaine case (${nx.day} ${MOIS}) dans`;
+  $('cd-days-box').hidden = t.d === 0 && !before;
+  $('cd-d').textContent = pad2(t.d); $('cd-h').textContent = pad2(t.h); $('cd-m').textContent = pad2(t.m); $('cd-s').textContent = pad2(t.s);
+
+  // Petit minuteur rouge sur la prochaine case
+  const nextBtn = document.querySelector(`.case[data-day="${nx.day}"]:not(.aujourdhui)`);
+  if (nextBtn && !before) {
+    const tag = nextBtn.querySelector('.tag');
+    nextBtn.classList.add('prochaine');
+    tag.textContent = t.d ? `dans ${t.d} j ${pad2(t.h)} h` : `dans ${pad2(t.h)}:${pad2(t.m)}:${pad2(t.s)}`;
+  }
+  // Dans la fenêtre de la case, si elle est ouverte
+  const mn = $('m-next');
+  if (!$('modal').hidden && !before) {
+    mn.textContent = `⏳ Prochaine case dans ${t.d ? `${t.d} j ` : ''}${pad2(t.h)} h ${pad2(t.m)} min ${pad2(t.s)} s`;
+    mn.hidden = false;
+  }
+}
+setInterval(updateCountdown, 1000);
 let creatorName = 'MXOU';
 
 let adminMode = false;
@@ -52,7 +103,7 @@ function buildCase(c, index) {
   const btn = document.createElement('button');
   btn.type = 'button';
   const preview = adminMode && c.state !== 'aujourdhui';
-  btn.className = `case ${c.state}${preview ? ' apercu' : ''}`;
+  btn.className = `case ${c.state}${preview ? ' apercu' : ''}${c.opened && c.state === 'aujourdhui' ? ' deja-ouverte' : ''}`;
   btn.style.animationDelay = `${index * 35}ms`;
   btn.dataset.day = c.day;
 
@@ -76,7 +127,7 @@ function buildCase(c, index) {
   deco.innerHTML = ICONS[c.icon] || ICONS.etoile; // SVG statiques, définis dans icons.js
   const tag = document.createElement('span');
   tag.className = 'tag';
-  tag.textContent = preview ? 'Aperçu admin' : { aujourdhui: 'Ouvre-moi', passee: 'Passée', future: '' }[c.state];
+  tag.textContent = preview ? 'Aperçu admin' : c.opened && c.state === 'aujourdhui' ? 'Ouverte ✓' : { aujourdhui: 'Ouvre-moi', passee: 'Passée', future: '' }[c.state];
   door.append(num, deco, tag);
   if (c.state !== 'aujourdhui' && !preview) door.insertAdjacentHTML('beforeend', `<span class="lock">${LOCK}</span>`);
 
@@ -127,10 +178,20 @@ async function openCase(btn, c) {
     const data = await res.json();
     if (!res.ok) { toast(data.error || 'Cette case ne peut pas être ouverte.'); return; }
 
-    btn.classList.add('ouverte');
-    burst(btn);
-    await wait(reducedMotion ? 50 : 750);
+    if (data.next) { calData.next = data.next; clockOffset = (data.now || Date.now()) - Date.now(); }
+    const first = !data.already_opened && !c.opened;
+    c.opened = true;
+    if (first) {
+      // 1re ouverture : animation complète
+      btn.classList.add('ouverte');
+      burst(btn);
+      await wait(reducedMotion ? 50 : 750);
+    }
+    btn.classList.add('deja-ouverte');
+    const tag = btn.querySelector('.tag');
+    if (tag && c.state === 'aujourdhui') tag.textContent = 'Ouverte ✓';
     showModal(data);
+    updateCountdown();
   } catch {
     toast('Oups, un problème de connexion. Réessaie !');
   } finally {
@@ -187,6 +248,8 @@ function showModal(c) {
   $('m-activate').hidden = true;
   $('ticket').hidden = true;
   $('m-preview').hidden = !c.preview;
+  $('m-already').hidden = !c.already_opened || c.admin;
+  $('m-next').hidden = true;
   $('m-activate').textContent = c.admin ? 'Créer un ticket (admin)' : 'Activer ma récompense';
   if (c.my_participation && !c.admin) showTicket(c.my_participation);
   else if (c.participation_open) $('m-activate').hidden = false;
@@ -255,6 +318,10 @@ function renderRules(r) {
     return li;
   }));
   $('rules-fan').textContent = `+${r.superfan} tickets`;
+  const ex = (lvl) => { const tier = r.tiers.find(([max]) => lvl <= max) || r.tiers[r.tiers.length - 1]; return lvl * tier[1]; };
+  const maxL = r.tiers[r.tiers.length - 1][0];
+  const samples = [5, 12, 25].filter((l) => l <= maxL);
+  $('rules-examples').textContent = `Exemples : ${samples.map((l) => `niveau ${l} = ${ex(l)} tickets`).join(' · ')}${samples.length ? ` · niveau ${samples[samples.length - 1]} + Super Fan = ${ex(samples[samples.length - 1]) + r.superfan} tickets` : ''}`;
   $('rules-coins').textContent = r.coinsPer > 0 ? `Chaque tranche de ${r.coinsPer} pièces envoyées = 1 ticket en plus.` : 'Les cadeaux ne donnent pas de tickets pour le moment.';
   const maxLvl = r.tiers[r.tiers.length - 1][0];
   $('f-hearts').max = maxLvl;

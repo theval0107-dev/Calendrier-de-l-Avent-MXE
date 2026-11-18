@@ -19,7 +19,7 @@
   <nav class="admin-bar">
     <a class="admin-link" id="admin-link" href="/admin/login">🔐 <span>Se connecter en tant qu’administrateur</span></a>
   </nav>
-  <p class="admin-banner" id="admin-banner" hidden>👑 Mode administrateur : tu peux ouvrir toutes les cases en avance. Les viewers, eux, ne voient que la case du jour.</p>
+  <p class="admin-banner" id="admin-banner" hidden>👑 Mode administrateur : tu peux ouvrir toutes les cases en avance, les comptes à rebours ne te bloquent pas. Les viewers, eux, ne voient que la case du jour.</p>
 
   <header class="hero">
     <p class="eyebrow" id="year">Calendrier de l'Avent</p>
@@ -28,6 +28,17 @@
     <p class="headline"><span class="hl-gold">24 jours</span><span class="hl-white">24 cadeaux</span></p>
     <p class="live-pill"><span class="dot"></span>À gagner en live</p>
     <p class="status" id="status" role="status"></p>
+
+    <!-- Compte à rebours : doré avant le 1er décembre, rouge pour la prochaine case -->
+    <div class="countdown" id="countdown" hidden aria-live="polite">
+      <p class="cd-title" id="cd-title"></p>
+      <div class="cd-boxes">
+        <div class="cd-box" id="cd-days-box"><b id="cd-d">00</b><span>jours</span></div>
+        <div class="cd-box"><b id="cd-h">00</b><span>heures</span></div>
+        <div class="cd-box"><b id="cd-m">00</b><span>minutes</span></div>
+        <div class="cd-box"><b id="cd-s">00</b><span>secondes</span></div>
+      </div>
+    </div>
 
     <div class="socials" id="socials" hidden>
       <p class="socials-title">Rejoins la communauté</p>
@@ -59,6 +70,7 @@
         <div class="rule-icon">❤️</div>
         <h3>Cœur du jour <span class="req">obligatoire</span></h3>
         <ul id="rules-hearts"></ul>
+        <p class="rule-examples" id="rules-examples"></p>
       </article>
       <article class="rule">
         <div class="rule-icon">⭐</div>
@@ -144,6 +156,8 @@
       <button class="btn" id="m-activate" type="button" hidden>Activer ma récompense</button>
       <p class="modal-note" id="m-closed" hidden>Les participations sont fermées pour le moment.</p>
       <p class="modal-preview" id="m-preview" hidden>👀 Aperçu administrateur : les viewers ne peuvent pas encore ouvrir cette case.</p>
+      <p class="modal-already" id="m-already" hidden>✅ Tu as déjà ouvert cette case. Une case ne s’ouvre qu’une seule fois : tu peux juste revoir ton lot et ton ticket.</p>
+      <p class="modal-next" id="m-next" hidden></p>
 
       <form class="part-form" id="part-form" hidden novalidate>
         <label>Ton pseudo TikTok

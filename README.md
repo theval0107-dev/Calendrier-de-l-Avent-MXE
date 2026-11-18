@@ -6,6 +6,8 @@ Un calendrier de l'Avent en ligne : 24 cases, une seule case ouvrable par jour, 
 
 **Côté viewers** (`/`)
 - 24 cases vert foncé décorées, du 1er au 24 décembre.
+- Compte à rebours doré jusqu'au 1er décembre. En décembre, compte à rebours rouge jusqu'à la prochaine case, une fois la case du jour ouverte. Les admins ne sont pas bloqués.
+- Chaque viewer n'ouvre une case qu'une seule fois (c'est enregistré sur le serveur). Ensuite, il peut seulement revoir son lot et son ticket.
 - Seule la case du jour s'ouvre. Les cases passées et futures restent fermées. C'est le serveur qui vérifie la date : impossible de tricher.
 - À l'ouverture : animation de la porte, étincelles dorées, puis le lot du jour.
 - Bouton **« Activer ma récompense »** : le viewer donne son pseudo TikTok, son nombre de cœurs du jour et s'il est Top Fan. Il reçoit un ticket (ex. `J07-K3QFZ`).
@@ -59,7 +61,7 @@ Après avoir modifié un fichier du dossier `admin/`, lance `npm run build-admin
 ## Style et musique
 - Polices libres incluses dans `public/fonts/` : Anton, Playfair Display et Poppins (licence SIL OFL).
 - Photos des 3 derniers lots dans `public/img/`, tirées de la vidéo de présentation.
-- Musique par défaut : « Jingle Bells » à 120 bpm avec grelots, comme dans la vidéo. D'autres choix sont disponibles dans les Réglages.
+- Musique par défaut : « Ambiance de Noël », une composition originale douce (nappes, célesta, écho, réverbération) qui varie à chaque boucle. « Jingle Bells » comme dans la vidéo et d'autres choix sont disponibles dans les Réglages.
 
 ## Sécurité
 - Mots de passe chiffrés (PBKDF2-SHA256). Les sessions sont stockées en base dans des cookies `HttpOnly`, `Secure` et `SameSite=Strict`. Elles expirent après 12 h.

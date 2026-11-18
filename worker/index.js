@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS = {
   rules_intro: 'Pour vous remercier de votre présence, de votre soutien et de votre fidélité sur les lives, j’ai décidé de mettre en place un calendrier de l’Avent avec des récompenses à gagner tout au long du mois de décembre !',
   music_enabled: '1',
   music_url: '',
-  music_track: 'jinglelive',
+  music_track: 'ambiance',
   creator_name: 'MXOU',
   tiktok_url: 'https://www.tiktok.com/@maxousurfortnite',
   discord_url: 'https://discord.gg/UxfcmGM9H',
@@ -47,13 +47,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_part_visitor ON participations(day, visit
 CREATE TABLE IF NOT EXISTS visits (date TEXT NOT NULL, visitor_id TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, visitor_id));
 CREATE TABLE IF NOT EXISTS draws (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, participation_id INTEGER NOT NULL, pseudo TEXT NOT NULL, ticket_code TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, seen INTEGER NOT NULL DEFAULT 0, manual INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS opens (day INTEGER NOT NULL, date TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, date));
+CREATE TABLE IF NOT EXISTS case_opens (day INTEGER NOT NULL, visitor_id TEXT NOT NULL, opened_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (day, visitor_id));
 CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, first INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0);
 `;
 
 const SESSION_MS = 12 * 3600 * 1000;
 const PBKDF2_ITER = 20000;
 const STATUSES = ['attente', 'validee', 'refusee'];
-const MUSIC_TRACKS = ['jinglelive', 'deckhalls', 'wewish', 'jingle', 'doucenuit'];
+const MUSIC_TRACKS = ['ambiance', 'jinglelive', 'deckhalls', 'wewish', 'jingle', 'doucenuit'];
 const ACCENTS = ['rouge', 'vert', 'violet', 'noir', 'bleu', 'or'];
 // Présentation des lots comme dans la vidéo : sous-titre (pastille), couleur, photo
 const REWARD_STYLE = {
@@ -195,6 +196,14 @@ async function init(env) {
     await db.batch(upd);
   }
 
+  // Mise à jour v5 (une seule fois) : nouvelle musique d'ambiance
+  if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_v5'").first())) {
+    await db.batch([
+      db.prepare("UPDATE settings SET value = 'ambiance' WHERE key = 'music_track'"),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_v5', '1')"),
+    ]);
+  }
+
   // Code administrateur : vient du secret Cloudflare ADMIN_CODE (ou ADMIN_PASSWORD).
   // Si le secret change, le code est remplacé. Sinon, le code choisi dans l'onglet Compte est gardé.
   const seed = env.ADMIN_CODE || env.ADMIN_PASSWORD;
@@ -237,6 +246,32 @@ function calendarToday(s) {
   else if (y === year && m === 12 && d <= 24) status = 'pendant';
   else status = 'apres';
   return { date, day: status === 'pendant' ? d : null, status, testMode: Boolean(s.test_date) };
+}
+
+// Instant (en ms) correspondant à minuit, heure locale du fuseau, pour une date donnée
+function localMidnight(tz, y, m, d) {
+  const guess = Date.UTC(y, m - 1, d);
+  const offsetAt = (ms) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - ms;
+  };
+  let t = guess - offsetAt(guess);
+  t = guess - offsetAt(t);
+  return t;
+}
+// Prochaine ouverture : le 1er décembre avant le début, sinon minuit prochain (vraie heure)
+function nextUnlock(s, t) {
+  let tz = s.timezone || 'Europe/Paris';
+  try { new Intl.DateTimeFormat('fr', { timeZone: tz }); } catch { tz = 'Europe/Paris'; }
+  const year = Number(s.year);
+  if (t.status === 'avant') return { at: localMidnight(tz, year, 12, 1), day: 1 };
+  if (t.status === 'pendant' && t.day < 24) {
+    const [y, m, d] = todayInTimezone(tz).split('-').map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    return { at: localMidnight(tz, next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()), day: t.day + 1 };
+  }
+  return null;
 }
 
 // Limitation des tentatives (stockée en base, fonctionne sur tous les serveurs Cloudflare)
@@ -341,24 +376,27 @@ async function handleApi(req, env, url, res) {
     const t = calendarToday(s);
     const vid = visitorId(req, res);
     const isAdmin = Boolean(await currentSession(req, db));
-    const [, icons, wins, counts] = await db.batch([
+    const [, icons, wins, counts, myOpens] = await db.batch([
       db.prepare('INSERT INTO visits (date, visitor_id) VALUES (?, ?) ON CONFLICT(date, visitor_id) DO UPDATE SET views = views + 1').bind(t.date, vid),
       db.prepare('SELECT day, icon FROM cases ORDER BY day'),
       // Gains confirmés de ce visiteur, pas encore annoncés
       db.prepare(`SELECT d.id, d.day, d.pseudo, c.reward FROM draws d JOIN participations p ON p.id = d.participation_id JOIN cases c ON c.day = d.day
         WHERE p.visitor_id = ? AND d.confirmed = 1 AND d.seen = 0 AND d.manual = 0 ORDER BY d.day`).bind(vid),
       db.prepare("SELECT day, COUNT(*) AS n FROM participations WHERE status != 'refusee' GROUP BY day"),
+      db.prepare('SELECT day FROM case_opens WHERE visitor_id = ?').bind(vid),
     ]);
+    const opened = new Set(myOpens.results.map((r) => r.day));
     const countMap = isAdmin ? Object.fromEntries(counts.results.map((r) => [r.day, r.n])) : null;
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
-      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'jinglelive',
+      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'ambiance',
+      now: Date.now(), next: nextUnlock(s, t),
       admin: isAdmin, creatorName: s.creator_name || 'MXOU', wins: wins.results,
       rules: { ...ticketRules(s), intro: s.rules_intro || '' },
       socials: { tiktok: s.tiktok_url || '', discord: s.discord_url || '' },
       year: Number(s.year), status: t.status, today: t.day,
       cases: icons.results.map((c) => ({
-        day: c.day, icon: c.icon, ...(isAdmin ? { participants: countMap[c.day] || 0 } : {}),
+        day: c.day, icon: c.icon, opened: opened.has(c.day), ...(isAdmin ? { participants: countMap[c.day] || 0 } : {}),
         state: t.day === null ? (t.status === 'apres' ? 'passee' : 'future') : c.day === t.day ? 'aujourdhui' : c.day < t.day ? 'passee' : 'future',
       })),
     });
@@ -379,15 +417,22 @@ async function handleApi(req, env, url, res) {
     }
     const vid = visitorId(req, res);
     const isToday = t.day === day;
+    // Une seule ouverture par viewer et par case : la 1re est enregistrée, les suivantes
+    // ne rejouent pas l'ouverture (le viewer peut seulement revoir sa case et son ticket).
+    let alreadyOpened = false;
+    if (!isAdmin) {
+      const r = await db.prepare('INSERT OR IGNORE INTO case_opens (day, visitor_id) VALUES (?, ?)').bind(day, vid).run();
+      alreadyOpened = (r.meta?.changes ?? 1) === 0;
+    }
     const queries = [
       db.prepare('SELECT day, title, message, reward, subtitle, accent, image_url, link_url, link_label FROM cases WHERE day = ?').bind(day),
       db.prepare('SELECT pseudo, tickets, ticket_code, status FROM participations WHERE day = ? AND visitor_id = ?').bind(day, vid),
     ];
-    // Les ouvertures faites par l'administrateur ne sont pas comptées dans les statistiques
-    if (!isAdmin) queries.push(db.prepare('INSERT INTO opens (day, date, count) VALUES (?, ?, 1) ON CONFLICT(day, date) DO UPDATE SET count = count + 1').bind(day, t.date));
+    // Statistiques : seules les premières ouvertures des viewers sont comptées (pas l'admin)
+    if (!isAdmin && !alreadyOpened) queries.push(db.prepare('INSERT INTO opens (day, date, count) VALUES (?, ?, 1) ON CONFLICT(day, date) DO UPDATE SET count = count + 1').bind(day, t.date));
     const [c, mine] = await db.batch(queries);
     return res.json({
-      ...c.results[0], preview: !isToday,
+      ...c.results[0], preview: !isToday, already_opened: alreadyOpened, now: Date.now(), next: nextUnlock(s, t),
       participation_open: (isToday && s.participation_open === '1') || isAdmin,
       admin: isAdmin,
       my_participation: mine.results[0] || null,
@@ -531,7 +576,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const values = {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
-      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'jinglelive',
+      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'ambiance',
       creator_name: clean(b.creator_name, 40) || 'MXOU',
       tiktok_url: socialUrl(b.tiktok_url), discord_url: socialUrl(b.discord_url),
       heart_t1_max: int(b.heart_t1_max, 1, 1000, 9), heart_t1_mult: int(b.heart_t1_mult, 0, 1000, 1),

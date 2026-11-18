@@ -500,3 +500,34 @@ button.btn:disabled { opacity: .6; cursor: wait; }
 .social-text b { font-family: var(--display); font-weight: 400; font-size: 22px; text-transform: uppercase; letter-spacing: .02em; }
 .social-text small { font-size: 13px; color: rgba(247, 244, 236, .75); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .social-cta { flex: none; padding: 7px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #111; background: #fff; }
+
+/* ---------- Comptes à rebours ---------- */
+.countdown { margin: 22px auto 0; max-width: 560px; padding: 16px 18px 18px; border-radius: 20px; }
+.countdown[hidden] { display: none; }
+.cd-title { margin: 0 0 12px; font-family: var(--display); font-size: 22px; text-transform: uppercase; letter-spacing: .02em; }
+.cd-boxes { display: flex; justify-content: center; gap: 10px; }
+.cd-box { min-width: 76px; padding: 10px 8px 8px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; }
+.cd-box[hidden] { display: none; }
+.cd-box b { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 7vw, 48px); line-height: 1; font-variant-numeric: tabular-nums; }
+.cd-box span { margin-top: 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
+.cd-gold { background: linear-gradient(170deg, rgba(230, 192, 104, .16), rgba(230, 192, 104, .05)); border: 1.5px solid rgba(230, 192, 104, .6); box-shadow: 0 0 30px rgba(230, 192, 104, .2); }
+.cd-gold .cd-title { color: #ffe6a3; text-shadow: 0 0 14px rgba(230, 192, 104, .6); }
+.cd-gold .cd-box { background: rgba(0, 0, 0, .3); border: 1px solid rgba(230, 192, 104, .35); }
+.cd-gold .cd-box b { color: #ffe6a3; text-shadow: 0 0 16px rgba(230, 192, 104, .7); }
+.cd-red { background: linear-gradient(170deg, rgba(226, 33, 63, .28), rgba(120, 6, 22, .25)); border: 1.5px solid rgba(255, 59, 85, .75); box-shadow: 0 0 30px rgba(226, 33, 63, .35); animation: redpulse 2s ease-in-out infinite; }
+.cd-red .cd-title { color: #ff9aa9; }
+.cd-red .cd-box { background: rgba(60, 4, 12, .55); border: 1px solid rgba(255, 59, 85, .5); }
+.cd-red .cd-box b { color: #ff5c73; text-shadow: 0 0 16px rgba(255, 59, 85, .8); }
+@keyframes redpulse { 50% { box-shadow: 0 0 44px rgba(226, 33, 63, .6); } }
+@media (max-width: 420px) { .cd-box { min-width: 64px; } .cd-boxes { gap: 6px; } }
+
+/* Case déjà ouverte : porte entrouverte */
+.case.deja-ouverte .door { transform: rotateY(-28deg); box-shadow: -6px 8px 20px rgba(0, 0, 0, .5); animation: none; }
+.case.deja-ouverte .door .tag { color: #8ee0ad; }
+/* Prochaine case : minuteur rouge */
+.case.prochaine .door { border-color: rgba(255, 59, 85, .6); }
+.case.prochaine .door .tag { color: #ff6b80; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; text-transform: none; font-size: 11px; }
+.modal-already { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; color: #8ee0ad; background: rgba(127, 214, 164, .1); border: 1px solid rgba(127, 214, 164, .4); }
+.modal-already[hidden], .modal-next[hidden] { display: none; }
+.modal-next { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-weight: 700; font-size: 15px; color: #ff6b80; background: rgba(226, 33, 63, .15); border: 1px solid rgba(255, 59, 85, .55); font-variant-numeric: tabular-nums; }
+.rule-examples { margin: 10px 0 0 !important; font-size: 12px !important; color: var(--or) !important; }
