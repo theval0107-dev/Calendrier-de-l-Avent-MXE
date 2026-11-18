@@ -202,7 +202,7 @@ $('p-refresh').addEventListener('click', () => loaders.participants());
 // ---------- Roue du tirage ----------
 let rewards = {};
 let wheelEntries = [];      // [{pseudo, tickets, manual}]
-let manualNames = [];
+let manualNames = [];      // [{ pseudo, tickets }]
 let rot = 0;                // rotation actuelle de la roue (radians)
 let spinning = false;
 let lastDraw = null;
@@ -238,7 +238,7 @@ async function refreshWheel() {
   renderChips();
   const tickets = wheelEntries.reduce((a, e) => a + e.tickets, 0);
   $('w-count').textContent = wheelEntries.length
-    ? `${wheelEntries.length} personne(s) sur la roue · ${tickets} ticket(s)`
+    ? `${wheelEntries.length} personne(s) sur la roue · ${tickets} ticket(s)${manualNames.length ? ` · dont ${manualNames.reduce((a, m) => a + m.tickets, 0)} ajouté(s) à la main` : ''}`
     : 'La roue est vide : valide des participations ou ajoute des pseudos à la main.';
   drawWheel();
   $('w-live').textContent = wheelEntries.length ? '—' : 'Roue vide';
@@ -392,16 +392,45 @@ $('w-confirm').addEventListener('click', async () => {
 });
 
 function renderChips() {
-  $('w-manual').replaceChildren(...manualNames.map((n) => el('span', { class: 'chip' }, `@${n}`,
-    el('button', { type: 'button', 'aria-label': `Retirer ${n}`, text: '×', onclick: () => { manualNames = manualNames.filter((x) => x !== n); refreshWheel(); } }))));
+  $('w-manual').replaceChildren(...manualNames.map((m) => {
+    const change = (delta) => { m.tickets = Math.max(1, m.tickets + delta); refreshWheel(); };
+    return el('span', { class: 'chip' }, `@${m.pseudo}`,
+      el('span', { class: 'chip-tk', title: 'Tickets ajoutés' },
+        el('button', { type: 'button', 'aria-label': `Un ticket de moins pour ${m.pseudo}`, text: '−', onclick: () => change(-1) }),
+        `${m.tickets} 🎟️`,
+        el('button', { type: 'button', 'aria-label': `Un ticket de plus pour ${m.pseudo}`, text: '+', onclick: () => change(1) })),
+      el('button', { type: 'button', 'aria-label': `Retirer ${m.pseudo}`, text: '×', onclick: () => { manualNames = manualNames.filter((x) => x !== m); refreshWheel(); } }));
+  }));
+}
+function ticketField() {
+  const n = Math.floor(Number($('w-add-tickets').value));
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : 1;
+}
+function setTicketField(n) {
+  $('w-add-tickets').value = Math.max(1, Math.min(100000, n));
+  document.querySelectorAll('#w-tk-quick button').forEach((b) => b.classList.toggle('on', Number(b.dataset.tk) === Number($('w-add-tickets').value)));
 }
 function addManual() {
   const raw = $('w-add-input').value;
-  const names = raw.split(/[\n,;]+/).map((x) => x.trim().replace(/^@+/, '')).filter(Boolean);
-  for (const n of names) if (!manualNames.some((x) => x.toLowerCase() === n.toLowerCase())) manualNames.push(n.slice(0, 40));
+  const def = ticketField();
+  const items = raw.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).map((x) => {
+    // « pseudo:15 » ou « pseudo 15 » = 15 tickets pour cette personne
+    const m = /^@?([^\s:]+)\s*[:\s]\s*(\d+)$/.exec(x);
+    return m ? { pseudo: m[1], tickets: Math.max(1, Number(m[2])) } : { pseudo: x.replace(/^@+/, '').split(/\s+/)[0], tickets: def };
+  }).filter((it) => it.pseudo);
+  for (const it of items) {
+    const ex = manualNames.find((x) => x.pseudo.toLowerCase() === it.pseudo.toLowerCase());
+    if (ex) ex.tickets += it.tickets; else manualNames.push({ pseudo: it.pseudo.slice(0, 40), tickets: it.tickets });
+  }
+  if (items.length) toast(items.length === 1 ? `@${items[0].pseudo} ajouté avec ${items[0].tickets} ticket(s)` : `${items.length} pseudos ajoutés`);
   $('w-add-input').value = '';
   refreshWheel();
 }
+$('w-tk-minus').addEventListener('click', () => setTicketField(ticketField() - 1));
+$('w-tk-plus').addEventListener('click', () => setTicketField(ticketField() + 1));
+$('w-add-tickets').addEventListener('input', () => setTicketField(ticketField()));
+document.querySelectorAll('#w-tk-quick button').forEach((b) => b.addEventListener('click', () => setTicketField(Number(b.dataset.tk))));
+setTicketField(1);
 $('w-add').addEventListener('click', addManual);
 $('w-add-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addManual(); } });
 $('w-add-input').addEventListener('paste', () => setTimeout(() => { if (/[\n,;]/.test($('w-add-input').value)) addManual(); }, 0));

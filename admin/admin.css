@@ -146,7 +146,21 @@ tr.today td { background: rgba(230, 192, 104, .07); }
 .wheel-controls hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
 .add-row { display: flex; gap: 8px; }
 .add-row input { flex: 1; }
+.add-block { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end; }
+@media (max-width: 520px) { .add-block { grid-template-columns: 1fr 1fr; } .add-block label:first-child { grid-column: 1 / -1; } }
+.tk-stepper { display: flex; align-items: stretch; }
+.tk-stepper input { width: 74px; text-align: center; border-radius: 0; font-weight: 700; -moz-appearance: textfield; }
+.tk-stepper input::-webkit-outer-spin-button, .tk-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tk-btn { width: 36px; border: 1px solid rgba(255, 255, 255, .12); background: var(--panel-2); color: var(--texte); font: inherit; font-size: 18px; font-weight: 700; cursor: pointer; }
+.tk-btn:first-child { border-radius: 10px 0 0 10px; } .tk-btn:last-child { border-radius: 0 10px 10px 0; }
+.tk-btn:hover { background: rgba(230, 192, 104, .15); color: var(--or); }
+.tk-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tk-quick button { border: 1px solid var(--line); background: var(--panel-2); color: var(--texte); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.tk-quick button.on, .tk-quick button:hover { border-color: var(--or); color: var(--or); background: rgba(230, 192, 104, .12); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip .chip-tk { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 1px 4px; border-radius: 999px; background: rgba(230, 192, 104, .14); color: var(--or); font-weight: 700; font-size: 12px; }
+.chip .chip-tk button { width: 20px; height: 20px; font-size: 13px; background: rgba(0, 0, 0, .25); color: var(--or); }
+.chip .chip-tk button:hover { background: rgba(230, 192, 104, .3); color: #fff; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); }
 .chip button { border: 0; background: rgba(255, 255, 255, .08); color: var(--muted); width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; }
 .chip button:hover { background: rgba(200, 16, 46, .4); color: #fff; }

@@ -675,12 +675,19 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
       rows = (await db.prepare(`SELECT id, pseudo, tickets, ticket_code FROM participations WHERE day = ?${onlyValidated ? " AND status = 'validee'" : " AND status != 'refusee'"} ORDER BY id`).bind(day).all()).results;
     }
     const seen = new Set(rows.map((r) => r.pseudo.toLowerCase()));
+    // Ajouts manuels : { pseudo, tickets }. Si la personne est déjà sur la roue, ses tickets s'ajoutent.
     const manual = Array.isArray(b.manual) ? b.manual : [];
     for (const raw of manual.slice(0, 500)) {
-      const name = clean(raw, 40).replace(/^@+/, '');
-      if (!name || seen.has(name.toLowerCase())) continue;
+      const item = typeof raw === 'string' ? { pseudo: raw, tickets: 1 } : (raw || {});
+      const name = clean(item.pseudo, 40).replace(/^@+/, '');
+      let tk = Number(item.tickets);
+      if (!Number.isInteger(tk) || tk < 1) tk = 1;
+      tk = Math.min(tk, 100000);
+      if (!name) continue;
+      const existing = rows.find((r) => r.pseudo.toLowerCase() === name.toLowerCase());
+      if (existing) { existing.tickets += tk; existing.extra = (existing.extra || 0) + tk; continue; }
       seen.add(name.toLowerCase());
-      rows.push({ id: 0, pseudo: name, tickets: 1, ticket_code: '', manual: true });
+      rows.push({ id: 0, pseudo: name, tickets: tk, ticket_code: '', manual: true });
     }
     if (b.exclude_previous_winners === true) {
       const won = new Set((await db.prepare('SELECT pseudo FROM draws WHERE confirmed = 1').all()).results.map((r) => r.pseudo.toLowerCase()));
