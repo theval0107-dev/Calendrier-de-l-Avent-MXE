@@ -531,3 +531,19 @@ button.btn:disabled { opacity: .6; cursor: wait; }
 .modal-already[hidden], .modal-next[hidden] { display: none; }
 .modal-next { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-weight: 700; font-size: 15px; color: #ff6b80; background: rgba(226, 33, 63, .15); border: 1px solid rgba(255, 59, 85, .55); font-variant-numeric: tabular-nums; }
 .rule-examples { margin: 10px 0 0 !important; font-size: 12px !important; color: var(--or) !important; }
+
+/* ---------- Écran d'accueil (débloque la musique) ---------- */
+.welcome { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 20px;
+  background: radial-gradient(circle at 50% 35%, rgba(230, 192, 104, .22), rgba(4, 12, 9, .94) 60%); backdrop-filter: blur(8px); animation: fade .5s; }
+.welcome[hidden] { display: none; }
+.welcome-card { width: min(460px, 100%); text-align: center; padding: 34px 26px 26px; border-radius: 26px;
+  background: linear-gradient(170deg, #15493a, #0b2a1f 65%, #07201a); border: 1.5px solid rgba(230, 192, 104, .7);
+  box-shadow: 0 0 0 6px rgba(230, 192, 104, .1), 0 30px 80px rgba(0, 0, 0, .6), 0 0 80px rgba(230, 192, 104, .2); animation: pop .7s cubic-bezier(.2, 1.3, .4, 1); }
+.welcome-tree { font-size: 64px; line-height: 1; filter: drop-shadow(0 6px 18px rgba(230, 192, 104, .5)); animation: trophy 2.4s ease-in-out infinite; }
+.welcome-eyebrow { margin: 12px 0 2px; letter-spacing: .32em; text-transform: uppercase; font-size: 12px; font-weight: 600; color: var(--or); }
+.welcome-card h2 { margin: 0; font-family: var(--serif); font-weight: 900; font-size: clamp(28px, 6vw, 38px);
+  background: linear-gradient(180deg, #fff6d6, var(--or) 60%, var(--or-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.welcome-sub { margin: 8px 0 22px; font-family: var(--display); font-size: 20px; text-transform: uppercase; color: var(--neige); }
+button.btn.welcome-btn { font-size: 18px; padding: 15px 30px; animation: glowbtn 2s ease-in-out infinite; }
+@keyframes glowbtn { 50% { box-shadow: 0 0 0 6px rgba(230, 192, 104, .18), 0 6px 24px rgba(230, 192, 104, .55); } }
+.welcome-silent { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--texte-doux); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }

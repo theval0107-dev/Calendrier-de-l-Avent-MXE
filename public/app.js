@@ -516,23 +516,49 @@ function setupMusic(data) {
   let muted = false;
   try { muted = localStorage.getItem('music-muted') === '1'; } catch {}
   const refresh = () => {
-    btn.setAttribute('aria-pressed', String(music.playing));
-    $('music-label').textContent = music.playing ? 'Couper la musique' : 'Musique';
-    btn.classList.toggle('invite', !music.playing && !muted);
+    const on = music.playing && !music.blocked;
+    btn.setAttribute('aria-pressed', String(on));
+    $('music-label').textContent = on ? 'Couper la musique' : 'Mettre la musique';
+    btn.classList.toggle('invite', !on && !muted);
   };
-  btn.addEventListener('click', (e) => {
+  const setMuted = (v) => { muted = v; try { localStorage.setItem('music-muted', v ? '1' : '0'); } catch {} };
+  const start = async () => {
+    if (!music.playing) music.play();
+    await music.unlock();
+    refresh();
+  };
+  btn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (music.playing) { music.stop(); muted = true; } else { music.play(); muted = false; }
-    try { localStorage.setItem('music-muted', muted ? '1' : '0'); } catch {}
+    if (music.playing && !music.blocked) { music.stop(); setMuted(true); }
+    else { setMuted(false); await start(); }
+    $('welcome').hidden = true;
     refresh();
   });
-  // Démarre au premier geste sur la page (obligatoire pour les navigateurs)
-  const first = () => {
-    if (!muted && !music.playing) { music.play(); refresh(); }
-    removeEventListener('pointerdown', first); removeEventListener('keydown', first);
+
+  // 1) On essaie de lancer la musique tout de suite, dès l'arrivée sur le site
+  if (!muted) music.play();
+  // 2) Si le navigateur bloque le son, le premier geste (toucher, clic, touche) le débloque…
+  const first = async (e) => {
+    // le bouton musique et l'écran d'accueil gèrent eux-mêmes le son
+    if (e.target && e.target.closest && e.target.closest('#music-btn, #welcome')) return;
+    removeEventListener('pointerdown', first, true); removeEventListener('keydown', first, true);
+    if (!muted) { await start(); $('welcome').hidden = true; }
   };
-  if (!muted) { addEventListener('pointerdown', first); addEventListener('keydown', first); }
+  if (!muted) { addEventListener('pointerdown', first, true); addEventListener('keydown', first, true); }
+  // 3) … et un écran d'accueil invite à entrer (le clic lance la musique)
+  setTimeout(() => {
+    refresh();
+    if (!muted && music.blocked && !sessionFlag('welcome-seen')) {
+      $('welcome').hidden = false;
+      $('welcome-enter').focus();
+    }
+  }, 400);
+  $('welcome-enter').addEventListener('click', async () => { sessionFlag('welcome-seen', true); setMuted(false); await start(); $('welcome').hidden = true; });
+  $('welcome-silent').addEventListener('click', () => { sessionFlag('welcome-seen', true); music.stop(); setMuted(true); $('welcome').hidden = true; refresh(); });
   refresh();
+}
+function sessionFlag(key, set) {
+  try { if (set) sessionStorage.setItem(key, '1'); return sessionStorage.getItem(key) === '1'; } catch { return false; }
 }
 
 // Petites étoiles dorées qui scintillent (comme dans la vidéo)

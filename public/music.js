@@ -57,6 +57,7 @@ const AMBIENT = {
 };
 
 const TRACKS = {
+  noel: { engine: 'medley' },
   ambiance: { engine: 'ambient' },
   // Comme la vidéo : intro en arpèges, puis « Jingle Bells » à 120 bpm avec grelots
   jinglelive: {
@@ -163,8 +164,27 @@ const TRACKS = {
 
 const VOLUME = 0.16;
 
-export function createMusic({ url, track } = {}) {
-  const T = TRACKS[track] || TRACKS.ambiance;
+// ----- « Chants de Noël » : enchaînement de chants traditionnels (domaine public) -----
+// Célesta + glockenspiel, nappes chaudes, basse, grelots, écho et réverbération.
+const CHORD_NOTES = {
+  C: ['C4', 'E4', 'G4'], F: ['F3', 'A3', 'C4'], G: ['G3', 'B3', 'D4'], G7: ['G3', 'B3', 'F4'], Am: ['A3', 'C4', 'E4'],
+  Em: ['E3', 'G3', 'B3'], A7: ['A3', 'C#4', 'G4'], D: ['D3', 'F#3', 'A3'], B7: ['B3', 'D#4', 'A4'], Bb: ['Bb3', 'D4', 'F4'],
+};
+const CHORD_BASS = { C: ['C2', 'G2'], F: ['F2', 'C3'], G: ['G2', 'D3'], G7: ['G2', 'D3'], Am: ['A2', 'E3'], Em: ['E2', 'B2'], A7: ['A2', 'E3'], D: ['D2', 'A2'], B7: ['B1', 'F#2'], Bb: ['Bb1', 'F2'] };
+const MEDLEY = [
+  { unit: 0.44, bells: true, bounce: true, melody: JINGLE_CHORUS, chords: JINGLE_CHORDS.map((c) => [c, 4]) },
+  { unit: 0.42, bells: true, bounce: true,
+    melody: [...TRACKS.wewish.melody, ...TRACKS.wewish.melody],
+    chords: (() => { const one = [['-', 1], ['G', 3], ['C', 3], ['A7', 3], ['D', 3], ['B7', 3], ['Em', 3], ['C', 1.5], ['D', 1.5], ['G', 3], ['-', 1]]; return [...one, ...one]; })() },
+  { unit: 0.34, bells: true, bounce: true, melody: TRACKS.deckhalls.melody,
+    chords: [['F', 4], ['F', 4], ['C', 4], ['F', 4], ['F', 4], ['F', 4], ['C', 4], ['F', 4],
+      ['C', 4], ['F', 4], ['C', 4], ['G', 2], ['C', 2], ['F', 4], ['F', 4], ['Bb', 4], ['C', 2], ['F', 2], ['-', 2]] },
+  { unit: 0.26, bells: false, bounce: false, melody: TRACKS.doucenuit.melody,
+    chords: [['C', 12], ['C', 12], ['G7', 12], ['C', 12], ['F', 12], ['C', 12], ['F', 12], ['C', 12], ['G7', 12], ['C', 12], ['C', 6], ['G7', 6], ['C', 12], ['-', 6]] },
+];
+
+export function createMusic({ url, track, renderSeconds } = {}) {
+  const T = TRACKS[track] || TRACKS.noel;
   let ctx = null, master = null, playing = false, timer = null, audioEl = null;
   let reverb = null, echo = null, loopIndex = 0;
 
@@ -243,6 +263,45 @@ export function createMusic({ url, track } = {}) {
     const g = ctx.createGain(); g.gain.value = 0.12;
     src.connect(hp).connect(g); g.connect(master); g.connect(reverb);
     src.start(t);
+  }
+
+  let songIndex = 0;
+  function scheduleSong(start) {
+    const song = MEDLEY[songIndex % MEDLEY.length];
+    const round = Math.floor(songIndex / MEDLEY.length);
+    songIndex++;
+    const u = song.unit;
+    shimmer(start);
+    // Mélodie : célesta + glockenspiel une octave au-dessus (plus discret)
+    let t = start;
+    for (const [note, d] of song.melody) {
+      if (note !== '-') {
+        const f = freq(note);
+        celesta(f, t, d * u, 0.26);
+        if (song.bells || round % 2 === 1) celesta(f * 2, t, d * u, 0.05);
+      }
+      t += d * u;
+    }
+    const melEnd = t;
+    // Accords : nappe + basse (rebondissante sur les chants rythmés)
+    t = start;
+    for (const [c, beats] of song.chords) {
+      const dur = beats * u;
+      if (c !== '-') {
+        pad(CHORD_NOTES[c], t, dur, song.bounce ? 0.011 : 0.016);
+        if (song.bounce) {
+          for (let b = 0; b < beats; b++) bassNote(CHORD_BASS[c][b % 2], t + b * u, u * 0.6);
+        } else {
+          bassNote(CHORD_BASS[c][0], t, dur);
+        }
+      }
+      t += dur;
+    }
+    // Grelots sur les chants rythmés
+    if (song.bells) {
+      for (let b = 0; b * u < melEnd - start - u; b += 0.5) bell(start + b * u, b % 1 === 0 ? (b % 2 === 0 ? 0.2 : 0.14) : 0.08);
+    }
+    return Math.max(melEnd, t) + u; // petite respiration entre deux chants
   }
 
   function scheduleAmbient(start) {
@@ -336,17 +395,25 @@ export function createMusic({ url, track } = {}) {
   function startSynth() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
-    master.gain.value = T.engine === 'ambient' ? 0.0001 : VOLUME;
+    const rich = T.engine === 'ambient' || T.engine === 'medley';
+    master.gain.value = rich ? 0.0001 : VOLUME;
     master.connect(ctx.destination);
-    ctx.resume();
-    if (T.engine === 'ambient') {
+    try { const r = ctx.resume(); if (r && r.catch) r.catch(() => {}); } catch { /* contexte hors ligne */ }
+    if (rich) {
       setupFx();
-      master.gain.linearRampToValueAtTime(0.95, ctx.currentTime + 3); // fondu d'entrée
+      master.gain.linearRampToValueAtTime(T.engine === 'medley' ? 0.6 : 0.95, ctx.currentTime + 3); // fondu d'entrée
     }
     let next = ctx.currentTime + 0.1;
+    // Pré-écoute (rendu hors ligne) : tout programmer d'un coup
+    if (renderSeconds) {
+      while (next < renderSeconds) next = T.engine === 'ambient' ? scheduleAmbient(next) : T.engine === 'medley' ? scheduleSong(next) : scheduleLoop(next);
+      return;
+    }
     const loop = () => {
       // on programme la boucle suivante un peu avant la fin de la précédente
-      if (ctx && next - ctx.currentTime < 4) next = T.engine === 'ambient' ? scheduleAmbient(next) : scheduleLoop(next);
+      if (ctx && next - ctx.currentTime < 4) {
+        next = T.engine === 'ambient' ? scheduleAmbient(next) : T.engine === 'medley' ? scheduleSong(next) : scheduleLoop(next);
+      }
       timer = setTimeout(loop, 1000);
     };
     loop();
@@ -363,12 +430,23 @@ export function createMusic({ url, track } = {}) {
 
   return {
     get playing() { return playing; },
+    // true si le navigateur a bloqué le son (aucune interaction encore)
+    get blocked() {
+      if (!playing) return false;
+      if (audioEl) return audioEl.paused;
+      return !ctx || ctx.state !== 'running';
+    },
+    unlock() {
+      if (audioEl) return audioEl.play().catch(() => {});
+      if (ctx && ctx.state !== 'running') return ctx.resume();
+      return Promise.resolve();
+    },
     play() {
       if (playing) return;
       playing = true;
       if (url) {
         if (!audioEl) { audioEl = new Audio(url); audioEl.loop = true; audioEl.volume = 0.4; }
-        audioEl.play().catch(() => { playing = false; });
+        audioEl.play().catch(() => { /* bloqué : on réessaiera au premier geste */ });
       } else {
         startSynth();
       }

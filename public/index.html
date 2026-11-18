@@ -103,6 +103,18 @@
 
   <div class="toast" id="toast" role="alert" hidden></div>
 
+  <!-- Écran d'accueil : affiché seulement si le navigateur a bloqué la musique -->
+  <div class="welcome" id="welcome" hidden>
+    <div class="welcome-card" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <div class="welcome-tree" aria-hidden="true">🎄</div>
+      <p class="welcome-eyebrow">Bienvenue</p>
+      <h2 id="welcome-title">Le calendrier de l’Avent</h2>
+      <p class="welcome-sub">24 jours · 24 cadeaux à gagner en live</p>
+      <button class="btn welcome-btn" id="welcome-enter" type="button">🔊 Entrer dans le calendrier</button>
+      <button class="welcome-silent" id="welcome-silent" type="button">Entrer sans le son</button>
+    </div>
+  </div>
+
   <!-- Admin : participants d'une case -->
   <div class="modal" id="plist" hidden>
     <div class="modal-backdrop" data-close-plist></div>

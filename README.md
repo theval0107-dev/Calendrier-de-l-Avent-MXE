@@ -61,7 +61,7 @@ Après avoir modifié un fichier du dossier `admin/`, lance `npm run build-admin
 ## Style et musique
 - Polices libres incluses dans `public/fonts/` : Anton, Playfair Display et Poppins (licence SIL OFL).
 - Photos des 3 derniers lots dans `public/img/`, tirées de la vidéo de présentation.
-- Musique par défaut : « Ambiance de Noël », une composition originale douce (nappes, célesta, écho, réverbération) qui varie à chaque boucle. « Jingle Bells » comme dans la vidéo et d'autres choix sont disponibles dans les Réglages.
+- Musique par défaut : « Chants de Noël », un enchaînement de chants traditionnels (Jingle Bells, We Wish You a Merry Christmas, Deck the Halls, Douce nuit) avec célesta, grelots, nappes et réverbération. Le site essaie de la lancer dès l’arrivée. Si le navigateur bloque le son, un écran d’accueil « Entrer dans le calendrier » la lance au premier clic. Le bouton en bas à gauche coupe le son. « Jingle Bells » comme dans la vidéo et d'autres choix sont disponibles dans les Réglages.
 
 ## Sécurité
 - Mots de passe chiffrés (PBKDF2-SHA256). Les sessions sont stockées en base dans des cookies `HttpOnly`, `Secure` et `SameSite=Strict`. Elles expirent après 12 h.

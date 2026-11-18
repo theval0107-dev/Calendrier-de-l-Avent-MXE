@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS = {
   rules_intro: 'Pour vous remercier de votre présence, de votre soutien et de votre fidélité sur les lives, j’ai décidé de mettre en place un calendrier de l’Avent avec des récompenses à gagner tout au long du mois de décembre !',
   music_enabled: '1',
   music_url: '',
-  music_track: 'ambiance',
+  music_track: 'noel',
   creator_name: 'MXOU',
   tiktok_url: 'https://www.tiktok.com/@maxousurfortnite',
   discord_url: 'https://discord.gg/UxfcmGM9H',
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL,
 const SESSION_MS = 12 * 3600 * 1000;
 const PBKDF2_ITER = 20000;
 const STATUSES = ['attente', 'validee', 'refusee'];
-const MUSIC_TRACKS = ['ambiance', 'jinglelive', 'deckhalls', 'wewish', 'jingle', 'doucenuit'];
+const MUSIC_TRACKS = ['noel', 'ambiance', 'jinglelive', 'deckhalls', 'wewish', 'jingle', 'doucenuit'];
 const ACCENTS = ['rouge', 'vert', 'violet', 'noir', 'bleu', 'or'];
 // Présentation des lots comme dans la vidéo : sous-titre (pastille), couleur, photo
 const REWARD_STYLE = {
@@ -201,6 +201,14 @@ async function init(env) {
     await db.batch([
       db.prepare("UPDATE settings SET value = 'ambiance' WHERE key = 'music_track'"),
       db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_v5', '1')"),
+    ]);
+  }
+
+  // Mise à jour v6 (une seule fois) : musique « Chants de Noël »
+  if (!(await db.prepare("SELECT 1 AS x FROM settings WHERE key = 'admin_v6'").first())) {
+    await db.batch([
+      db.prepare("UPDATE settings SET value = 'noel' WHERE key = 'music_track'"),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_v6', '1')"),
     ]);
   }
 
@@ -389,7 +397,7 @@ async function handleApi(req, env, url, res) {
     const countMap = isAdmin ? Object.fromEntries(counts.results.map((r) => [r.day, r.n])) : null;
     return res.json({
       appName: s.app_name, subtitle: s.subtitle, footer: s.footer_text,
-      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'ambiance',
+      musicEnabled: s.music_enabled === '1', musicUrl: s.music_url || '', musicTrack: s.music_track || 'noel',
       now: Date.now(), next: nextUnlock(s, t),
       admin: isAdmin, creatorName: s.creator_name || 'MXOU', wins: wins.results,
       rules: { ...ticketRules(s), intro: s.rules_intro || '' },
@@ -576,7 +584,7 @@ async function adminRoutes(req, db, p, m, sess, res, url) {
     const values = {
       app_name: name, subtitle: clean(b.subtitle, 200), footer_text: clean(b.footer_text, 300), year: String(year), timezone: tz, test_date: test,
       participation_open: b.participation_open ? '1' : '0', music_enabled: b.music_enabled ? '1' : '0', music_url: musicUrl,
-      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'ambiance',
+      music_track: MUSIC_TRACKS.includes(b.music_track) ? b.music_track : 'noel',
       creator_name: clean(b.creator_name, 40) || 'MXOU',
       tiktok_url: socialUrl(b.tiktok_url), discord_url: socialUrl(b.discord_url),
       heart_t1_max: int(b.heart_t1_max, 1, 1000, 9), heart_t1_mult: int(b.heart_t1_mult, 0, 1000, 1),
